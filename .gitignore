@@ -43,3 +43,10 @@ Thumbs.db
 # Tests temp
 .pytest_cache/
 __pycache__/
+
+# Environment artifacts (مش جزء من الكود)
+.zscripts/
+mini-services/
+skills/
+tsconfig.tsbuildinfo
+tool-results/
