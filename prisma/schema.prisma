@@ -1,0 +1,183 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Employee {
+  id           String   @id @default(cuid())
+  name         String
+  role         String
+  dept         String // management | finance | hr | marketing | tech | design
+  gender       String // male | female
+  skin         String
+  hair         String
+  shirt        String
+  personality  String
+  systemPrompt String @default("")
+  skills       String @default("[]") // JSON array
+  tools        String @default("[]") // JSON array of tool ids
+  x            Float @default(50)
+  y            Float @default(50)
+  isHired      Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  messages     Message[]
+  tasks        Task[]
+  trainings    Training[]
+  agentRuns    AgentRun[]
+  memories     EmployeeMemory[]
+}
+
+model Message {
+  id         String    @id @default(cuid())
+  employeeId String?
+  employee   Employee? @relation(fields: [employeeId], references: [id])
+  channel    String // dm | team | meeting
+  meetingId  String?
+  role       String // ceo | employee
+  senderName String?
+  content    String
+  attachments String  @default("[]") // JSON array of attachment ids
+  createdAt  DateTime  @default(now())
+}
+
+model Task {
+  id         String    @id @default(cuid())
+  employeeId String
+  employee   Employee  @relation(fields: [employeeId], references: [id])
+  title      String
+  status     String    @default("in_progress") // in_progress | awaiting_approval | approved | rejected
+  result     String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+}
+
+model Meeting {
+  id              String    @id @default(cuid())
+  topic           String
+  participantIds  String @default("[]") // JSON array of employee ids
+  status          String    @default("active") // active | ended
+  summary         String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model Training {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  skill      String
+  summary    String
+  createdAt  DateTime @default(now())
+}
+
+model Activity {
+  id        String   @id @default(cuid())
+  icon      String   @default("sparkles")
+  text      String
+  createdAt DateTime @default(now())
+}
+
+model Tool {
+  id        String  @id
+  name      String
+  category  String
+  desc      String
+  connected Boolean @default(false)
+}
+
+// ===== محرك الوكيل المفتوح — بأسلوب OpenManus =====
+model AgentRun {
+  id          String   @id @default(cuid())
+  employeeId  String
+  employee    Employee @relation(fields: [employeeId], references: [id])
+  mission     String
+  status      String   @default("queued") // queued | planning | running | done | failed
+  provider    String   @default("zai") // zai | openai | openrouter | groq | deepseek | gemini | anthropic | custom
+  model       String   @default("")
+  plan        String   @default("[]") // JSON [{title}]
+  currentStep Int      @default(0)
+  result      String?
+  error       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  steps       AgentStep[]
+  logs        AgentLog[]
+  files       WorkspaceFile[]
+}
+
+model AgentStep {
+  id      String  @id @default(cuid())
+  runId   String
+  run     AgentRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  index   Int
+  title   String
+  status  String  @default("pending") // pending | running | done | failed
+  output  String  @default("")
+  createdAt DateTime @default(now())
+}
+
+model AgentLog {
+  id     String @id @default(cuid())
+  runId  String
+  run    AgentRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  level  String @default("info") // info | tool | result | error
+  text   String
+  createdAt DateTime @default(now())
+}
+
+model WorkspaceFile {
+  id       String  @id @default(cuid())
+  runId    String?
+  run      AgentRun? @relation(fields: [runId], references: [id], onDelete: Cascade)
+  name     String
+  mime     String  @default("application/octet-stream")
+  size     Int     @default(0)
+  diskName String // file name on disk inside db/uploads
+  kind     String  @default("output") // output | upload
+  createdAt DateTime @default(now())
+}
+
+// مفاتيح مزودين الذكاء الاصطناعي — BYOK (متخزنة مشفرة AES-256-GCM)
+model ProviderKey {
+  id        String   @id @default(cuid())
+  provider  String // openai | openrouter | groq | cerebras | sambanova | cloudflare | huggingface | deepseek | gemini | anthropic | mistral | siliconflow | moonshot | zhipu | custom
+  label     String   @default("")
+  apiKey    String // مشفرة — مبتتخزنش نص صريح أبداً
+  baseUrl   String   @default("")
+  model     String   @default("")
+  enabled   Boolean  @default(true)
+  isDefault Boolean  @default(false)
+  lastStatus String  @default("") // "" | ok | failed
+  createdAt DateTime @default(now())
+}
+
+// ذاكرة الموظفين — قصيرة المدى (ملخصات محادثة) وطويلة المدى (نتايج مهام وتفضيلات)
+model EmployeeMemory {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  kind       String   @default("long") // short | long
+  content    String
+  createdAt  DateTime @default(now())
+}
+
+// أجزاء الملفات المرفوعة للـ RAG — بحث دلالي خفيف بالكلمات المفتاحية
+model FileChunk {
+  id      String @id @default(cuid())
+  fileId  String // WorkspaceFile.id
+  idx     Int    @default(0)
+  text    String
+  createdAt DateTime @default(now())
+
+  @@index([fileId])
+}
+
+// إعدادات عامة للتطبيق (إصدار الـ prompts، الخ)
+model AppMeta {
+  key   String @id
+  value String
+}
