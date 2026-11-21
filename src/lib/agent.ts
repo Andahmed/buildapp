@@ -489,6 +489,33 @@ async function executeRun(runId: string, tmpDir: string) {
             continue;
           }
         }
+        // مراجعة ذاتية قبل قبول التسليم — بتعمل فرق في جودة الشغل الحقيقي
+        try {
+          const revRes = await callLLM(
+            [
+              {
+                role: "system" as const,
+                content:
+                  'أنت مراجع جودة صارم. هل نتايج الخطوات بتغطي المهمة كاملة؟ رد JSON بس: {"verdict":"ok"} أو {"verdict":"gaps","missing":"وصف النواقص الجوهرية بس"}. ما تحسبش تحسينات شكلية نواقص.',
+              },
+              {
+                role: "user" as const,
+                content: `المهمة: ${run.mission}\nنتايج الخطوات:\n${observations.map((o) => `- ${o.slice(0, 700)}`).join("\n")}`,
+              },
+            ],
+            { temperature: 0.2, maxTokens: 500, preferFree: true }
+          );
+          const rev = extractJSON<{ verdict?: string; missing?: string }>(revRes.text);
+          if (rev?.verdict === "gaps" && rev.missing?.trim() && i < Math.min(titles.length, MAX_STEPS) - 1) {
+            await addLog(runId, "info", `المراجعة قبل التسليم لقيت نواقص: ${rev.missing.slice(0, 180)} — بنكمل تصحيح`);
+            observations.push(`(ملاحظة مراجعة الجودة: ${rev.missing.slice(0, 400)})`);
+            await db.agentStep.update({ where: { id: step.id }, data: { status: "failed", output: "المراجعة طلبت تصحيح" } });
+            continue;
+          }
+          await addLog(runId, "info", "المراجعة قبل التسليم: الشغل مقبول");
+        } catch {
+          await addLog(runId, "info", "مراجعة الجودة اتخطت (المحرك مش متاح)");
+        }
         const summary = String(finalAct.args?.summary ?? "").trim() || "المهمة اكتملت";
         await db.agentStep.update({ where: { id: step.id }, data: { status: "done", output: summary } });
         finalResult = summary;
