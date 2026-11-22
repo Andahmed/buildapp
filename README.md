@@ -8,8 +8,9 @@
 - **محرك وكيل حقيقي**: مهمة واحدة = خطة + تنفيذ بأدوات فعلية (بحث ويب، قراءة صفحات، تشغيل Python معزول، كتابة ملفات، توليد صور) + **مراجعة ذاتية** بتصحح النواقص + **تفويض** لمهام فرعية لزملاء.
 - **مرفقات وصور**: ارفع ملف أو صورة في الشات — الصور بتتحلل بالرؤية، والملفات النصية بتبقى قابلة للبحث (RAG).
 - **BYOK**: أدخل مفتاح أي مزود — OpenAI، Gemini، OpenRouter، Groq، Cerebras، SambaNova، Cloudflare، Hugging Face، DeepSeek، Mistral، والصينيين (SiliconFlow/Moonshot/GLM) أو أي خدمة متوافقة OpenAI. المفاتيح **مشفرة AES-256-GCM** في القاعدة.
-- **سلسلة احتياطية ذكية**: مفاتيحك بالدوران → المحرك المجاني بدون مفتاح (Pollinations) → المحرك المدمج. تبديل تلقائي عند فشل أو استنفاد حصة، مع إعادة محاولة backoff.
+- **سلسلة احتياطية ذكية**: مفاتيحك بالدوران → المحرك المجاني بدون مفتاح (Pollinations) → المحرك المدمج. تبديل تلقائي عند فشل أو استنفاد حصة، مع إعادة محاولة backoff، وبوابة حد معدل محلية بتحمي نافذة الـ IP بتاعة Pollinations بدل ما تحرق 45 ثانية على 402.
 - **ذاكرة**: كل موظف ليه ذاكرة طويلة المدى (نتايج شغله السابق) وذاكرة قصيرة المدى (آخر نقاش).
+- **تقييم جودة منتظم**: سيناريوهات ثابتة + حكم LLM (`bun run scripts/evals.ts` → docs/EVALS-REPORT.md) — أي تعديل على البرومبتات بيتقاس قبل وبعد.
 - **PWA**: ثبّت التطبيق على موبايلك من المتصفح (Add to Home Screen).
 
 ## التشغيل على جهازك
@@ -35,7 +36,7 @@ src/
     pysandbox.ts   — عزل تشغيل Python (شبكة/ذاكرة/CPU/وقت)
     net-guard.ts   — حماية SSRF (منع العناوين الداخلية + DNS rebinding)
     crypto.ts      — تشفير المفاتيح AES-256-GCM
-    rag.ts         — فهرسة وبحث في الملفات المرفوعة (عربي مطبّع)
+    rag.ts         — فهرسة وبحث BM25-lite في الملفات المرفوعة (عربي مطبّع)
     employees.ts   — الفريق: 19 موظف + برومبتات ببروتوكول تفكير
   app/api/         — chat (dm/team بـ SSE)، agent، meetings، keys، upload...
   components/office/ — واجهة المكتب: خريطة الشغل، الشات، المهام، الاجتماعات
@@ -48,6 +49,34 @@ prisma/schema.prisma
 - Python بيشتغل معزول: بدون شبكة، بحد ذاكرة وCPU ووقت، في مجلد مؤقت يتحذف.
 - قراءة الصفحات بتفلتر العناوين الداخلية (localhost/خصوصية/ميتاداتا السحابة) وتفحص الـ DNS.
 - ملف `.env` و`db/` خارج Git تماماً — شوف `.gitignore`.
+
+## PWA على HTTPS + تحويله لـ APK
+
+التطبيق جاهز للتثبيت (manifest عربي RTL + service worker + أيقونات). عشان يشتغل تثبيت كامل لازم HTTPS:
+
+```bash
+# أسرع طريق: Cloudflare Tunnel على جهازك
+bunx cloudflared tunnel --url http://localhost:3000
+# أو أي استضافة HTTPS (Vercel/ Railway/ سيرفر مع Caddy)
+```
+
+بعد ما يكون عندك رابط HTTPS:
+
+1. افتح **pwabuilder.com** وحط رابط موقعك.
+2. اختار **Android package** → Generate.
+3. نزّل الـ APK وثبّته على أي أندرويد (أو ارفعه على Google Play بباقة التوقيع).
+
+## الرفع على GitHub
+
+الريبو جاهز محلياً بـ commits نظيفة وبدون أي أسرار (.env وdb/ والمفاتيح خارج Git). عشان ترفعه:
+
+```bash
+# مرة واحدة: اعمل repo فارغ على github.com باسم cod-dhaki-office (private أو public)
+git remote add origin git@github.com:YOUR-USERNAME/cod-dhaki-office.git
+git push -u origin main
+```
+
+بعد أول push هتشغل GitHub Actions تلقائياً (lint + tsc + build) — ملف الـ workflow جاهز في `.github/workflows/ci.yml`.
 
 ## ملاحظات صادقة
 
