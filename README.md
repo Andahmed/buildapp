@@ -78,6 +78,27 @@ git push -u origin main
 
 بعد أول push هتشغل GitHub Actions تلقائياً (lint + tsc + build) — ملف الـ workflow جاهز في `.github/workflows/ci.yml`.
 
+### الرفع من النسخة المحمولة (v0.1.0 bundle) — من غير ما تنقل المجلد كله
+
+لو عندك الحزمة `kod-zaki-v0.1.0.bundle` بس (من مجلد download)، التاريخ الكامل جواها:
+
+```bash
+git clone kod-zaki-v0.1.0.bundle cod-dhaki-office
+cd cod-dhaki-office
+bun install                     # أو npm install
+bunx prisma db push             # بيولّد db/custom.db فاضية
+cp .env.example .env            # وضيف مفاتيحك هنا
+git remote add origin git@github.com:YOUR-USERNAME/cod-dhaki-office.git
+git push -u origin main
+```
+
+### تشغيل سريع بعد أي نسخة
+
+```bash
+bun install && bunx prisma db push && cp .env.example .env && bun run dev
+```
+
+
 ## ملاحظات صادقة
 
 - المحرك المجاني (Pollinations) بيرد **مرة كل 45 ثانية** لكل IP — عشان سرعة حقيقية ضيف مفتاح Groq أو Cerebras (مجانيين) من تبويب المفاتيح.
