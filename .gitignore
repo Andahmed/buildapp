@@ -1,2 +1,29 @@
-skills/
+# dependencies
 node_modules/
+
+# sandbox-internal skills (مش جزء من المصدر)
+skills/
+
+# next.js build output + caches
+.next/
+out/
+*.tsbuildinfo
+.turbo/
+
+# environment — السماح فقط لـ .env.example
+.env
+.env.*
+!.env.example
+
+# database محلية (بتتولد بـ prisma db push)
+db/*.db
+db/*.db-journal
+
+# logs وملفات تشغيل
+dev.log
+*.log
+
+# مرفوعات المستخدم ومخلفات البيئة (مش جزء من مصدر التطبيق)
+upload/
+examples/
+output/
