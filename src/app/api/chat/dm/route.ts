@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
     if (content?.trim()) {
       const chunks = await searchChunks(content, 3);
       if (chunks.length > 0) {
-        ragContext = `\n\n[من ملفات الشركة المشفوعة — أجزاء ليها علاقة بطلبك:\n${chunks.join("\n---\n").slice(0, 2500)}\n]`;
+        ragContext = `\n\n[من ملفات الشركة — أجزاء محتمل أنها متعلقة بطلبك (لو مش ليها علاقة حقيقية بالسؤال، تجاهلها تماماً وجاوب على السؤال نفسه):\n${chunks.join("\n---\n").slice(0, 2500)}\n]`;
       }
     }
   } catch {

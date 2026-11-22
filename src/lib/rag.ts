@@ -60,7 +60,8 @@ function tokenize(q: string): string[] {
     .filter((w) => w.length >= 2);
 }
 
-/** بحث في الأجزاء — بيرجع أحسن 3 أجزاء ليها علاقة فعلياً بالسؤال */
+/** بحث في الأجزاء — BM25-lite (فكرة LlamaIndex/sqlite-vec): ترجيح بالندرة IDF + تطبيع طول المستند
+ *  بدل TF البسيط — الكلمة النادرة في السؤال (أرقام، أسماء، موديلات) بتاخد وزن أعلى من الكلمات الشائعة */
 export async function searchChunks(query: string, limit = 3): Promise<string[]> {
   const words = tokenize(query);
   if (words.length === 0) return [];
@@ -69,20 +70,45 @@ export async function searchChunks(query: string, limit = 3): Promise<string[]> 
   const candidates = await db.fileChunk.findMany({ take: 800, orderBy: { createdAt: "desc" } });
   if (candidates.length === 0) return [];
 
-  const scored: { text: string; score: number }[] = [];
-  for (const c of candidates) {
-    const norm = normalizeArabic(c.text);
-    let score = 0;
-    for (const w of unique) {
-      const count = norm.split(w).length - 1;
-      if (count > 0) score += 1 + Math.min(count, 5) * 0.2;
-    }
-    if (score >= Math.max(2, Math.min(unique.length, 3)) * 0.8) {
-      scored.push({ text: c.text, score });
-    }
+  // ثوابت BM25 القياسية (معايرة لملفات قصيرة ~700 حرف)
+  const K1 = 1.4;
+  const B = 0.72;
+  const docs = candidates.map((c) => ({ text: c.text, norm: normalizeArabic(c.text) }));
+  const N = docs.length;
+  const avgLen = docs.reduce((s, d) => s + d.norm.length, 0) / N || 1;
+
+  // تكرار الكلمة داخل المستند الواحد + عدد المستندات اللي فيها الكلمة (DF)
+  const freqIn = (doc: string, w: string) => doc.split(w).length - 1;
+  const df = new Map<string, number>();
+  for (const w of unique) {
+    let n = 0;
+    for (const d of docs) if (freqIn(d.norm, w) > 0) n++;
+    df.set(w, n);
   }
+
+  const scored: { text: string; score: number; matched: number }[] = [];
+  for (const d of docs) {
+    const lenNorm = K1 * (1 - B + B * (d.norm.length / avgLen));
+    let score = 0;
+    let matched = 0;
+    for (const w of unique) {
+      const f = freqIn(d.norm, w);
+      if (f === 0) continue;
+      matched++;
+      const n = df.get(w) ?? 0;
+      const idf = Math.log(1 + (N - n + 0.5) / (n + 0.5)); // IDF ناعم — مبيبوظش الكلمة الموجودة في الكل
+      score += idf * ((f * (K1 + 1)) / (f + lenNorm));
+    }
+    // دقة الاسترجاع: الجزء لازم يطابق كلمتين مختلفتين على الأقل من السؤال
+    // (سؤال "اعمل لي خطة نشر تطبيق ويب" مش لازم يجيب جزء مشروع توصيل أكل لمجرد كلمة "تطبيق")
+    const minMatch = Math.min(2, unique.length);
+    if (score > 0 && matched >= minMatch) scored.push({ text: d.text, score, matched });
+  }
+  if (scored.length === 0) return [];
   scored.sort((a, b) => b.score - a.score);
-  return scored.slice(0, limit).map((s) => s.text.slice(0, 900));
+  // عتبة نسبية: اللي جايين لحد 35% من أعلى نتيجة — بيشيل القطع العائرة بكلمات عامة
+  const cutoff = scored[0].score * 0.35;
+  return scored.filter((s) => s.score >= cutoff).slice(0, limit).map((s) => s.text.slice(0, 900));
 }
 
 /** حذف أجزاء ملف — لما الملف يتحذف */

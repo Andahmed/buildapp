@@ -87,6 +87,26 @@ let rotationCounter = 0;
 const keyCooldown = new Map<string, number>();
 const COOLDOWN_MS = 2 * 60 * 1000;
 
+// أخطاء الحصة اليومية (مثل Gemini الطبقة المجانية: "20 requests per day") — التبريد العادي دقيقتين
+// هيسبب إعادة محاولة فاشلة كل دقيقتين طول اليوم؛ بنبرده لحد منتصف الليل بتوقيت القاهرة بدل كده
+const DAILY_QUOTA_RE =
+  /per day|daily quota|quota exceeded|exceeded your current quota|rate limit exceeded|FREE_LIMIT/i;
+
+function coolKey(keyId: string | null, err?: unknown) {
+  if (!keyId) return;
+  let ms = COOLDOWN_MS;
+  const body = (err as { body?: string })?.body ?? "";
+  const msg = err instanceof Error ? err.message : String(err ?? "");
+  if (DAILY_QUOTA_RE.test(`${msg} ${body}`)) {
+    const now = new Date();
+    const cairo = new Date(now.toLocaleString("en-US", { timeZone: "Africa/Cairo" }));
+    const midnight = new Date(cairo);
+    midnight.setHours(24, 0, 5, 0);
+    ms = Math.min(Math.max(midnight.getTime() - cairo.getTime(), 60_000), 12 * 60 * 60 * 1000);
+  }
+  keyCooldown.set(keyId, Date.now() + ms);
+}
+
 export async function listEnabledKeys(): Promise<ProviderChoice[]> {
   let keys: { id: string; provider: string; model: string; apiKey: string; baseUrl: string; label: string; isDefault: boolean }[] = [];
   try {
@@ -127,7 +147,32 @@ export async function pickProvider(preferred?: string): Promise<ProviderChoice |
 
 // ============ المحركات المجانية المباشرة ============
 
+// ---- بوابة حد المعدل المحلية لـ Pollinations (فكرة LiteLLM: تبريد قبل الضرب مش بعده) ----
+// Pollinations المجاني: ~1 رد كل 45 ثانية لكل IP — اتقاست فعلياً (402 FREE_LIMIT بعد طلبين متتاليين).
+// بدل ما نحرق طلب حقيقي + مهلة 45 ثانية ونكشف 402، بنسجل وقت آخر استعمال (نجاح أو رفض)،
+// ولو المحاولة الجاية جاية في نافذة الـ IP بنرفض محلياً في 0ms → السلسلة بتنتقل فوراً للمحرك اللي بعده.
+const POLLINATIONS_IP_WINDOW_MS = 46_000;
+let pollinationsLastUseMs = 0;
+
+function pollinationsGateEnter(): void {
+  if (pollinationsLastUseMs > 0 && Date.now() - pollinationsLastUseMs < POLLINATIONS_IP_WINDOW_MS) {
+    const waitSec = Math.max(1, Math.ceil((POLLINATIONS_IP_WINDOW_MS - (Date.now() - pollinationsLastUseMs)) / 1000));
+    const err = new Error(
+      `pollinations: حد المعدل المحلي للـ IP — فاضل ${waitSec}ث، بننتقل للمحرك اللي بعده فوراً بدون طلب حقيقي`
+    ) as Error & { status?: number; skipRetry?: boolean };
+    err.status = 429;
+    err.skipRetry = true; // مش هنعيد المحاولة على نفس المحرك — الطاقة للمحرك اللي بعده
+    throw err;
+  }
+}
+
+/** أي رد HTTP من Pollinations (ناجح أو 402) معناه إن نافذة الـ IP اتستهلكت */
+function pollinationsMarkConsumed(): void {
+  pollinationsLastUseMs = Date.now();
+}
+
 async function callPollinationsText(messages: LLMMessage[], maxTokens?: number): Promise<string> {
+  pollinationsGateEnter();
   const res = await fetch("https://text.pollinations.ai/openai", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -138,6 +183,7 @@ async function callPollinationsText(messages: LLMMessage[], maxTokens?: number):
     }),
     signal: AbortSignal.timeout(45000),
   });
+  pollinationsMarkConsumed(); // أي رد HTTP — النافذة اتحرقت
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     const err = new Error(`pollinations error ${res.status}: ${body.slice(0, 200)}`) as Error & { status?: number; body?: string };
@@ -422,13 +468,22 @@ function buildFreeAttempts(messages: LLMMessage[], opts?: { maxTokens?: number }
       keyId: null,
       canStream: true,
       run: () => callPollinationsText(messages, opts?.maxTokens),
-      stream: () =>
-        openaiStream(
+      stream: async function* () {
+        pollinationsGateEnter(); // لو حد المعدل المحلي شغال — رفض فوري بدون فتح طلب
+        let marked = false;
+        for await (const d of openaiStream(
           "https://text.pollinations.ai/openai",
           { "Content-Type": "application/json" },
           { model: "openai-fast", messages: messages.map((m) => ({ role: m.role, content: m.content })), max_tokens: opts?.maxTokens ?? 2048 },
           45000
-        ),
+        )) {
+          if (!marked) {
+            marked = true;
+            pollinationsMarkConsumed(); // أول chunk = الطلب اتقبل ووصل — النافذة اتحرقت
+          }
+          yield d;
+        }
+      },
     },
     {
       name: "zai",
@@ -441,6 +496,7 @@ function buildFreeAttempts(messages: LLMMessage[], opts?: { maxTokens?: number }
 }
 
 function isRetryable(err: unknown): boolean {
+  if ((err as { skipRetry?: boolean })?.skipRetry) return false; // أخطاء البوابة المحلية — متعيدش، انتقل
   const msg = err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase();
   const status = (err as { status?: number })?.status;
   if (status && [408, 409, 425, 429, 500, 502, 503, 504, 402].includes(status)) return true;
@@ -461,10 +517,6 @@ function retryDelayMs(err: unknown, attemptNo: number): number | null {
   const mins = body.match(/retry in\s*([\d.]+)\s*(m|min)/i);
   if (mins) return null; // دقايق؟ بننتقل فوراً
   return [0, 1200, 3000][Math.min(attemptNo, 2)]; // backoff تصاعدي
-}
-
-function coolKey(keyId: string | null) {
-  if (keyId) keyCooldown.set(keyId, Date.now() + COOLDOWN_MS);
 }
 
 async function markKeyStatus(id: string | null, status: "ok" | "failed") {
@@ -524,7 +576,7 @@ export async function* streamLLM(
         return; // نجح — خلاص
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        if (attempt.keyId) coolKey(attempt.keyId);
+        if (attempt.keyId) coolKey(attempt.keyId, err);
         if (!isRetryable(err) || tryNo === 2) {
           errors.push(`${attempt.name}: ${msg.slice(0, 140)}`);
           console.error(`[providers] ${attempt.name} فشل نهائي → ${msg.slice(0, 180)}`);
