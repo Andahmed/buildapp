@@ -42,6 +42,7 @@ import {
   KeyRound,
   Building2,
   LayoutDashboard,
+  LogOut,
 } from "lucide-react";
 
 const ACTIVITY_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -91,6 +92,29 @@ export function OfficeApp() {
     } catch {
       // تجاهل — المحاولة الجاية هتجيب البيانات
     }
+  }, []);
+
+  // معترض 401: أي API رجّع «غير مصرح» بنحوله لصفحة الدخول فوراً
+  // (انتهت الجلسة أو الأدمن غير دست كلمة السر — مفيش أخطاء غامضة في الشاشة)
+  useEffect(() => {
+    const original = window.fetch.bind(window);
+    window.fetch = async (...args: Parameters<typeof fetch>) => {
+      const res = await original(...args);
+      if (res.status === 401) window.location.href = "/login";
+      return res;
+    };
+    return () => {
+      window.fetch = original;
+    };
+  }, []);
+
+  const logout = useCallback(async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      // حتى لو فشل الطلب نمسح الكوكي محلياً بالتحويل
+    }
+    window.location.href = "/login";
   }, []);
 
   useEffect(() => {
@@ -260,6 +284,16 @@ export function OfficeApp() {
             <Button size="sm" onClick={() => setHireOpen(true)} className="bg-emerald-600 hover:bg-emerald-700">
               <UserPlus className="h-4 w-4" />
               وظّف مطور
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={logout}
+              className="border-stone-300 text-stone-600 hover:bg-stone-50"
+              title="قفل الجلسة والخروج"
+            >
+              <LogOut className="h-4 w-4" />
+              خروج
             </Button>
           </div>
         </div>

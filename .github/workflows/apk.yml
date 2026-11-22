@@ -1,0 +1,41 @@
+# بناء app-debug.apk في السحابة — بدون Android SDK على أي جهاز محلي.
+# ملاحظة صادقة: أول تشغيل فعلي للـ workflow هو الاختبار الحقيقي (محتاج الريبو يترفع).
+# المتطلبات: ضع رابط النشر الحقيقي في capacitor.config.ts قبل التشغيل (شوف README).
+
+name: APK (Capacitor)
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: تثبيت Bun + الاعتماديات
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+
+      - name: توليد منصة الأندرويد (Capacitor)
+        run: npx cap add android
+
+      - name: تثبيت Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: بناء app-debug.apk
+        run: cd android && chmod +x gradlew && ./gradlew assembleDebug --no-daemon
+
+      - name: رفع الـ APK كـ artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error

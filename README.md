@@ -45,26 +45,44 @@ prisma/schema.prisma
 
 ## الأمان
 
-- مفاتيح API مشفرة في القاعدة، ومابترجعش نص صريح للواجهة أبداً.
+- **تسجيل دخول بالكلمة سر (إلزامي):** كل صفحة وكل API (بما فيها SSE) وراء جلسة موقعة — حط `ADMIN_PASSWORD` و`AUTH_SECRET` في البيئة وإلا التطبيق مش هيفتح خلاص (فشل مغلق). محاولات غلط: 8/15 دقيقة لكل IP.
+- مفاتيح API مشفرة في القاعدة (AES-256-GCM)، ومابترجعش نص صريح للواجهة أبداً (متقنعة ••••).
 - Python بيشتغل معزول: بدون شبكة، بحد ذاكرة وCPU ووقت، في مجلد مؤقت يتحذف.
 - قراءة الصفحات بتفلتر العناوين الداخلية (localhost/خصوصية/ميتاداتا السحابة) وتفحص الـ DNS.
 - ملف `.env` و`db/` خارج Git تماماً — شوف `.gitignore`.
+- اختبارات الدخول كاملة بدليلها: `bash scripts/test-auth.sh` (11 فحص) — التفاصيل في `docs/RESEARCH.md` و`TASKS-DONE.md`.
 
 ## PWA على HTTPS + تحويله لـ APK
 
 التطبيق جاهز للتثبيت (manifest عربي RTL + service worker + أيقونات). عشان يشتغل تثبيت كامل لازم HTTPS:
 
 ```bash
-# أسرع طريق: Cloudflare Tunnel على جهازك
+# أسرع طريق: Cloudflare Tunnel على جهازك (أنسب للأدمن — البيانات عندك)
 bunx cloudflared tunnel --url http://localhost:3000
-# أو أي استضافة HTTPS (Vercel/ Railway/ سيرفر مع Caddy)
+# أو Railway / Fly.io / Render مع volume دايم
+# ملحوظة مهمة: Vercel مش مناسب — القرص بيمسح نفسه (SQLite تضيع) والـ SSE بيتقطع
 ```
+
+**دليل النشر الكامل خطوة بخطوة (بالأنواع الأربعة + المتغيرات الإلزامية):** `docs/DEPLOY.md`
 
 بعد ما يكون عندك رابط HTTPS:
 
 1. افتح **pwabuilder.com** وحط رابط موقعك.
 2. اختار **Android package** → Generate.
 3. نزّل الـ APK وثبّته على أي أندرويد (أو ارفعه على Google Play بباقة التوقيع).
+
+### بناء APK تلقائي على GitHub Actions (بدون Android SDK على جهازك)
+
+الريبو فيه workflow جاهز يبني `app-debug.apk` في السحابة (`.github/workflows/apk.yml`) — إصدار v0.1.1 وما بعده. طريقة الشغل:
+
+1. **قبل أي حاجة:** بعد ما تنشر التطبيق على HTTPS، افتح `capacitor.config.ts` وبدّل `https://kod-dhaki.example.com` برابط النشر الحقيقي (مكانين: `url` و`allowNavigation`). ده لازم — التطبيق بتاعنا سيرفر-سايد (API + SSE + قاعدة بيانات)، فالـ APK عبارة عن **غلاف أصلي (WebView) حوالين نسخة النشر**، مش نسخة offline.
+2. ارفع الريبو على GitHub.
+3. من تبويب **Actions** اختار **"APK (Capacitor)"** → **Run workflow** (أو انتظر أي push لتاج `v*`).
+4. الـ workflow هيعمل: `bun install` → توليد منصة الأندرويد (`npx cap add android`) → Java 21 → `./gradlew assembleDebug` → يرفع `app-debug.apk` كـ artifact تنزّله من صفحة الـ run.
+5. ثبّت الـ APK على أي أندرويد (debug build — للتوقيع والنشر على Google Play محتاج keystore خاص بيك).
+6. أول ما يفتح الـ APK هتظهر **صفحة تسجيل الدخول** — اكتب `ADMIN_PASSWORD` والجلسة تفضل مفتوحة 7 أيام في الـ WebView.
+
+**الصادق:** الـ workflow لسه متشغلش فعلياً (بيحتاج الريبو يترفع الأول) — أول تشغيل على GitHub هو الاختبار الفعلي. `cap add android` نفسه اتجرب محلياً ونجح.
 
 ## الرفع على GitHub
 
@@ -78,16 +96,16 @@ git push -u origin main
 
 بعد أول push هتشغل GitHub Actions تلقائياً (lint + tsc + build) — ملف الـ workflow جاهز في `.github/workflows/ci.yml`.
 
-### الرفع من النسخة المحمولة (v0.1.0 bundle) — من غير ما تنقل المجلد كله
+### الرفع من النسخة المحمولة (v0.1.2 bundle) — من غير ما تنقل المجلد كله
 
-لو عندك الحزمة `kod-zaki-v0.1.0.bundle` بس (من مجلد download)، التاريخ الكامل جواها:
+لو عندك الحزمة `kod-zaki-v0.1.2.bundle` بس (من مجلد download)، التاريخ الكامل جواها:
 
 ```bash
-git clone kod-zaki-v0.1.0.bundle cod-dhaki-office
+git clone kod-zaki-v0.1.2.bundle cod-dhaki-office
 cd cod-dhaki-office
 bun install                     # أو npm install
 bunx prisma db push             # بيولّد db/custom.db فاضية
-cp .env.example .env            # وضيف مفاتيحك هنا
+cp .env.example .env            # ضيف هنا: ADMIN_PASSWORD + AUTH_SECRET + APP_SECRET + مفاتيحك
 git remote add origin git@github.com:YOUR-USERNAME/cod-dhaki-office.git
 git push -u origin main
 ```
@@ -96,6 +114,7 @@ git push -u origin main
 
 ```bash
 bun install && bunx prisma db push && cp .env.example .env && bun run dev
+# بعد أول تشغيل: ضيف ADMIN_PASSWORD و AUTH_SECRET في .env — بدونهم الواجهة مش هتفتح
 ```
 
 

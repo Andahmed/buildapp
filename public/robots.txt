@@ -1,14 +1,4 @@
-User-agent: Googlebot
-Allow: /
-
-User-agent: Bingbot
-Allow: /
-
-User-agent: Twitterbot
-Allow: /
-
-User-agent: facebookexternalhit
-Allow: /
-
+# مكتب شركة خاصة — ممنوع فهرسة أي صفحة أو API من محركات البحث
+# (المحتوى أصلاً محمي بتسجيل دخول، لكن الـ robots أول خط دفاع ضد تسريب العناوين في نتائج البحث)
 User-agent: *
-Allow: /
+Disallow: /

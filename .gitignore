@@ -27,3 +27,8 @@ dev.log
 upload/
 examples/
 output/
+
+# مخرجات التسليم (بيئة السandbox بتعمل auto-commit لها — تفضل خارج Git)
+download/
+android/
+cap-www/.DS_Store

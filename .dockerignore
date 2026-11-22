@@ -1,0 +1,16 @@
+node_modules
+.next
+.git
+db
+upload
+download
+skills
+android
+examples
+.env
+.env.*
+!.env.example
+dev.log
+server.log
+*.log
+*.tsbuildinfo

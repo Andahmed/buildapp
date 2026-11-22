@@ -28,3 +28,9 @@
 ## أدوات الجاهزية (القوالب الجاهزة للمشروع)
 
 هيكل المشروع الأساسي من قالب Next.js + Tailwind + shadcn/ui القياسي (MIT) — البوابة الرئيسية والواجهات كلها مكتوبة للمشروع.
+
+## مكتبات مدمجة كاعتماديات (رخص متوافقة)
+
+| المكتبة | الرخصة | استخدامها عندنا |
+|---|---|---|
+| Capacitor (@capacitor/core, @capacitor/cli, @capacitor/android) | MIT | غلاف APK أصلي (WebView) حوالين نسخة الـ PWA المنشورة على HTTPS — الإعداد في capacitor.config.ts والبناء السحابي في .github/workflows/apk.yml |

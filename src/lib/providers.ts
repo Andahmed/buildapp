@@ -171,6 +171,44 @@ function pollinationsMarkConsumed(): void {
   pollinationsLastUseMs = Date.now();
 }
 
+// ---- Preflight ميزانية التوكنات (فكرة من Habr — مقالة Bitrix24 عن فشل LLM في الإنتاج) ----
+// الفكرة: أغلب "الوقوف المفاجئ" في الإنتاج سببه طلبات أكبر من نافذة المحرك (input + output >
+// الحد) — المحرك بيرد 400 أو بيهنج بدل ما يرد صريح. الحل الرخيص: فحص قبل الضرب — لو المدخلات
+// + ميزانية الرد أكبر من نافذة المحرك الآمنة، نتخطاه محلياً في 0ms ونروح لللي بعده.
+// التقدير محافظ عمداً (3 حروف/توكن — العربية أثقل من الإنجليزية): الرفض الخاطئ تكلفه انتقال
+// للمحرك التالي، أما الإرسال الخاطئ فتكلفته مهلة 45ث + انهيار الرد.
+const CHARS_PER_TOKEN_CONSERVATIVE = 3;
+
+/** نوافذ إدخال آمنة لكل محرك (توكن) — تقديرات متحفظة أقل من المعلن رسمياً */
+const ENGINE_INPUT_WINDOWS: Record<string, number> = {
+  pollinations: 8_000,
+  zai: 24_000,
+  gemini: 80_000,
+  anthropic: 32_000,
+};
+const DEFAULT_INPUT_WINDOW = 16_000;
+
+function estimateMessagesTokens(messages: LLMMessage[]): number {
+  let chars = 0;
+  for (const m of messages) chars += typeof m.content === "string" ? m.content.length : 0;
+  return Math.ceil(chars / CHARS_PER_TOKEN_CONSERVATIVE);
+}
+
+/** فحص ميزانية المحرك — يرجع true لو آمن يتبعت، false لو محسوم استباقياً */
+export function preflightWindowOk(
+  engineName: string,
+  inputTokens: number,
+  maxTokens: number
+): { ok: boolean; window: number } {
+  const window = ENGINE_INPUT_WINDOWS[engineName.toLowerCase()] ?? DEFAULT_INPUT_WINDOW;
+  return { ok: inputTokens + maxTokens <= window, window };
+}
+
+/** تقدير التوكنات مكشوف للاختبارات (محافظ: 3 حروف/توكن) */
+export function estimateTokensForTest(messages: LLMMessage[]): number {
+  return estimateMessagesTokens(messages);
+}
+
 async function callPollinationsText(messages: LLMMessage[], maxTokens?: number): Promise<string> {
   pollinationsGateEnter();
   const res = await fetch("https://text.pollinations.ai/openai", {
@@ -414,7 +452,17 @@ function buildAttempts(
   opts?: { maxTokens?: number; temperature?: number }
 ): Attempt[] {
   const attempts: Attempt[] = [];
+  const budget = opts?.maxTokens ?? 4096;
+  const inputTokens = estimateMessagesTokens(messages);
   for (const choice of choices) {
+    // Preflight: طلب أكبر من نافذة المحرك = محسوم استباقياً — نتخطاه بدون طلب حقيقي (فكرة Habr/Bitrix24)
+    const pf = preflightWindowOk(choice.provider, inputTokens, budget);
+    if (!pf.ok) {
+      console.log(
+        `[preflight] ${choice.provider}: المدخلات ~${Math.ceil(inputTokens / 1000)}k توكن + ${budget} رد أكبر من النافذة الآمنة ${pf.window} — تخطي محلي فوري بدون ضرب المحرك`
+      );
+      continue;
+    }
     const base: Attempt = {
       name: choice.provider,
       model: choice.model,
@@ -461,8 +509,22 @@ function buildAttempts(
 }
 
 function buildFreeAttempts(messages: LLMMessage[], opts?: { maxTokens?: number }): Attempt[] {
-  return [
-    {
+  const budget = opts?.maxTokens ?? 2048;
+  const inputTokens = estimateMessagesTokens(messages);
+  const attempts: Attempt[] = [];
+  // Preflight لكل محرك مجاني — نفس فكرة بوابة حد المعدل: الرفض المحلي أرخص من الوقوف
+  for (const { engine, win } of [
+    { engine: "pollinations", win: ENGINE_INPUT_WINDOWS.pollinations },
+    { engine: "zai", win: ENGINE_INPUT_WINDOWS.zai },
+  ] as const) {
+    if (inputTokens + budget > win) {
+      console.log(
+        `[preflight] ${engine}: المدخلات ~${Math.ceil(inputTokens / 1000)}k توكن + ${budget} رد أكبر من النافذة الآمنة ${win} — تخطي محلي فوري`
+      );
+    }
+  }
+  if (inputTokens + budget <= ENGINE_INPUT_WINDOWS.pollinations) {
+    attempts.push({
       name: "pollinations",
       model: "openai-fast",
       keyId: null,
@@ -484,15 +546,18 @@ function buildFreeAttempts(messages: LLMMessage[], opts?: { maxTokens?: number }
           yield d;
         }
       },
-    },
-    {
+    });
+  }
+  if (inputTokens + budget <= ENGINE_INPUT_WINDOWS.zai) {
+    attempts.push({
       name: "zai",
       model: "GLM مدمج",
       keyId: null,
       canStream: false,
       run: () => callZAIText(messages, opts?.maxTokens),
-    },
-  ];
+    });
+  }
+  return attempts;
 }
 
 function isRetryable(err: unknown): boolean {
