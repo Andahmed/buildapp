@@ -81,6 +81,12 @@ const SHARED_RULES = `
 - ما تختلقش أرقام أو عملاء أو مشاريع من دماغك عن الشركة — اتكلم بس على اللي قدامك.
 - ممكن تلمّح للأدوات المتصلة بيك في كلامك لو الموضوع ليها علاقة.
 - فريقنا بيستخدم أدوات مفتوحة المصدر مجانية بدل الاشتراكات المدفوعة الغالية، فلو حضرتك سألت عن أداة مدفوعة اقترح البديل المجاني لو موجود.
+
+مهارات الدورة الجديدة (طبّقها في كل شغلك):
+- اقتصاد التوكن: ردود مختصرة، والتفاصيل الزيادة عند الطلب — مفيش حشو.
+- قبل تسليم أي كود راجعه كأنك مراجع PR خارجي: أمان، حالات استثنائية، أداء، أسماء واضحة.
+- أي مهمة كبيرة (أكتر من ملفين): مواصفة مختصرة أولاً (الهدف والحدود ومعيار القبول) وبعدها التنفيذ.
+- لو المحرك وقف أو المفتاح خلص: قول الرئيس فوراً واقترح بديل مجاني جاهز (OpenRouter :free، Groq، Cerebras، Mistral، GLM-4-Flash، Pollinations، أو FreeLLMAPI الذاتي الاستضافة).
 `;
 
 export const EMPLOYEES: EmployeeSeed[] = [
@@ -417,6 +423,10 @@ export const TOOLS_SEED = [
   { id: "ollama", name: "Ollama", category: "ذكاء اصطناعي", desc: "تشغيل موديلات LLM على أجهزتنا محلياً — خصوصية كاملة وبدون اشتراك شهري" },
   { id: "open_webui", name: "Open WebUI", category: "ذكاء اصطناعي", desc: "واجهة دردشة موحدة للفريق كله فوق الموديلات المحلية" },
   { id: "comfyui", name: "ComfyUI", category: "ذكاء اصطناعي", desc: "توليد وتعديل الصور بالذكاء الاصطناعي — بدل اشتراكات الصور المدفوعة" },
+  { id: "kodus", name: "Kodus", category: "تطوير", desc: "مراجعة Pull Requests بالذكاء الاصطناعي بدون حدود بمفتاح API الخاص بالفريق (kodus.io)" },
+  { id: "freellmapi", name: "FreeLLMAPI", category: "ذكاء اصطناعي", desc: "مجمّع مجاني مفتوح المصدر: 87 مزود و1313 نقطة نهاية (~10.1 مليار توكن شهرياً) خلف endpoint واحد متوافق مع OpenAI — ذاتي الاستضافة" },
+  { id: "metamuse", name: "Meta Muse", category: "ذكاء اصطناعي", desc: "نماذج Meta للكود (Muse Spark) عبر Model API متوافق مع OpenAI — مليار توكن مجاني بكود دعوة" },
+  { id: "ashna", name: "AshnaAI", category: "ذكاء اصطناعي", desc: "مجمّع مُدار بـ endpoint واحد متوافق OpenAI قدام كتالوج كبير (gpt-6، Claude sonnet-5، GLM 5.3، DeepSeek v4، Kimi K3، Grok، Gemini) + بروتوكول Anthropic Messages لـ Claude Code — مفتاح مجاني من app.ashna.ai/account/api (ashna.ai/api-docs)" },
   { id: "whisper", name: "Whisper", category: "ذكاء اصطناعي", desc: "تحويل الصوت لنص ومحاضر الاجتماعات والتفريغ الآلي" },
   // التصميم والفيديو
   { id: "penpot", name: "Penpot", category: "تصميم", desc: "تصميم UI/UX وبروتوتايب للويب والموبايل — مفتوح المصدر" },
@@ -438,7 +448,7 @@ export const COMPANY_NAME = "شركة كود ذكي للتطوير البرمج�
 export const COMPANY_SHORT = "كود ذكي";
 
 // إصدار عقول الموظفين — لما نغير البرومبتات بنرفع الرقم عشان seed يعمل upgrade للقاعدة
-export const PROMPTS_VERSION = "v3.2-habr-preflight-2026-11-22";
+export const PROMPTS_VERSION = "v3.4-ashna-2026-11-24";
 
 // طريقة شغل عملية لكل قسم — بتتضاف للبرومبت بعد الوصف الشخصي
 const DEPT_METHOD: Record<string, string> = {
