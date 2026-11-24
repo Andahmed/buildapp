@@ -6,7 +6,7 @@ import { decryptSecret } from "@/lib/crypto";
 // تحسينات الإصدار ده (كلها مقاسة):
 // 1) تعدد المفاتيح: كل المفاتيح المفعلة بتتحاول بالدوران (round-robin) مع تبريد للمفاتيح الفاشلة
 // 2) إعادة محاولة ذكية مع backoff للأخطاء المؤقتة (429/402/شبكة/تايم أوت)
-// 3) Streaming حقيقي (SSE) للمحركات المتوافقة مع OpenAI — والمحركات بدون streaming بتتقسم تشunks
+// 3) Streaming حقيقي (SSE) للمحركات المتوافقة مع OpenAI — والمحركات بدون streaming بتتقسم تشchunks
 // 4) مهلات أقصر (45 ثانية بدل 90) عشان الانتقال للمحرك اللي بعده يبقى أسرع
 // 5) مفيش ردود وهمية: الرد إما حقيقي أو خطأ واضح بالعربي
 
@@ -35,6 +35,10 @@ export interface ProviderChoice {
   label?: string;
 }
 
+// FreeLLMAPI (tashfeenahmed/freellmapi): مجمّع ذاتي الاستضافة للطبقات المجانية —
+// 87 مزود و736 عائلة موديلات و1313 endpoint مجاني (~10.1 مليار توكن/شهر) خلف /v1 متوافق مع OpenAI.
+// التركيب بأمر واحد: curl -fsSL https://freellmapi.co/install.sh | bash
+// وبعده أضف مفتاح بنوع custom و baseUrl=http://<host>:3001/v1
 export const PROVIDER_PRESETS: Record<string, { label: string; baseUrl: string; model: string; docs: string }> = {
   openai: { label: "OpenAI", baseUrl: "https://api.openai.com/v1", model: "gpt-4o-mini", docs: "platform.openai.com" },
   openrouter: { label: "OpenRouter (بي وصل لموديلات كتير وفيه مجانية :free)", baseUrl: "https://openrouter.ai/api/v1", model: "openrouter/auto", docs: "openrouter.ai" },
@@ -44,6 +48,12 @@ export const PROVIDER_PRESETS: Record<string, { label: string; baseUrl: string; 
   cloudflare: { label: "Cloudflare Workers AI (مجاني بحدود)", baseUrl: "https://api.cloudflare.com/client/v4", model: "@cf/meta/llama-3.1-8b-instruct", docs: "developers.cloudflare.com/workers-ai" },
   huggingface: { label: "Hugging Face Router (موديلات مجانية)", baseUrl: "https://router.huggingface.co/v1", model: "meta-llama/Llama-3.3-70B-Instruct", docs: "huggingface.co/settings/tokens" },
   deepseek: { label: "DeepSeek", baseUrl: "https://api.deepseek.com/v1", model: "deepseek-chat", docs: "platform.deepseek.com" },
+  metamuse: { label: "Meta Muse (Spark — متوافق OpenAI، مليار توكن بكود دعوة)", baseUrl: "https://api.meta.ai/v1", model: "muse-spark-1.3", docs: "dev.meta.ai/docs/quickstart" },
+  // AshnaAI (ashna.ai): مجمّع مُدار — endpoint واحد متوافق OpenAI قدام كتالوج كبير
+  // (OpenAI gpt-6/5.x، Claude sonnet-5/opus-5، GLM 5.3، DeepSeek v4، Kimi K3، Grok 4.3، Gemini 3.x…).
+  // بيتكلم 3 بروتوكولات: OpenAI Chat Completions + Anthropic Messages (Claude Code) + OpenAI Responses (Codex).
+  // المفتاح مجاني ويُنشأ من app.ashna.ai/account/api — القاعدة: https://api.ashna.ai/v1/api
+  ashna: { label: "AshnaAI (كتالوج كبير — OpenAI-Compatible، مفتاح مجاني من الحساب)", baseUrl: "https://api.ashna.ai/v1/api", model: "glm-5.3-flash", docs: "ashna.ai/api-docs" },
   gemini: { label: "Google Gemini", baseUrl: "https://generativelanguage.googleapis.com", model: "gemini-3.8-flash", docs: "aistudio.google.com" },
   anthropic: { label: "Anthropic Claude", baseUrl: "https://api.anthropic.com", model: "claude-3-5-haiku-latest", docs: "console.anthropic.com" },
   mistral: { label: "Mistral (طبقة مجانية كبيرة)", baseUrl: "https://api.mistral.ai/v1", model: "mistral-small-latest", docs: "console.mistral.ai" },
