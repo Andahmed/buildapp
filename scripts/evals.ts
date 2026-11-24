@@ -84,7 +84,19 @@ function extractJSON(s: string): Record<string, unknown> | null {
 }
 
 async function main() {
-  const officeRes = await fetch(`${BASE}/api/office`);
+  // بوابة الدخول: جلسة أدمن قبل أي اختبار — البوابة بتمنع كل API بدون كوكي
+  const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+  if (!ADMIN_PASSWORD) throw new Error("محتاج ADMIN_PASSWORD في البيئة للدخول");
+  const loginRes = await fetch(`${BASE}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password: ADMIN_PASSWORD }),
+  });
+  if (!loginRes.ok) throw new Error(`فشل تسجيل الدخول: ${loginRes.status}`);
+  const cookie = (loginRes.headers.get("set-cookie") ?? "").split(";")[0];
+  if (!cookie.startsWith("kod_session=")) throw new Error("مفيش كوكي جلسة من الـ login");
+
+  const officeRes = await fetch(`${BASE}/api/office`, { headers: { Cookie: cookie } });
   if (!officeRes.ok) throw new Error("السيرفر مش شغال على :3000");
   const office = await officeRes.json();
   const employees: { id: string; name: string; dept: string; role: string }[] = office.employees;
@@ -110,7 +122,7 @@ async function main() {
     const t0 = performance.now();
     const res = await fetch(`${BASE}/api/chat/dm`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Cookie: cookie },
       body: JSON.stringify({ employeeId: emp.id, content: s.question }),
     });
     let ms = performance.now() - t0;
@@ -123,7 +135,7 @@ async function main() {
       let run: { status?: string; result?: string; error?: string } | null = null;
       while (Date.now() < deadline) {
         await new Promise((r) => setTimeout(r, 5000));
-        const st = await fetch(`${BASE}/api/agent/${data.agentRunId}`).then((r) => r.json());
+        const st = await fetch(`${BASE}/api/agent/${data.agentRunId}`, { headers: { Cookie: cookie } }).then((r) => r.json());
         run = st.run ?? null;
         if (run && ["done", "failed"].includes(run.status ?? "")) break;
       }

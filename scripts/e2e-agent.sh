@@ -1,7 +1,15 @@
 #!/bin/bash
 BASE="http://localhost:3000"
 
-EMP_ID=$(curl -s -m 15 "$BASE/api/office" | python3 -c "
+# بوابة الدخول: جلسة أدمن قبل أي اختبار — البوابة بتمنع كل API بدون كوكي
+PASS="${ADMIN_PASSWORD:?محتاج ADMIN_PASSWORD في البيئة}"
+JAR="${JAR:-/tmp/kod-cookies.jar}"
+rm -f "$JAR"
+LOGIN=$(curl -s -b "$JAR" -m 15 -c "$JAR" -X POST "$BASE/api/auth/login" -H "Content-Type: application/json" -d "{\"password\":\"$PASS\"}")
+echo "$LOGIN" | rg -q '"ok":true' || { echo "LOGIN FAILED: $LOGIN"; exit 1; }
+echo "تسجيل الدخول: تمام ✓"
+
+EMP_ID=$(curl -s -b "$JAR" -m 15 "$BASE/api/office" | python3 -c "
 import json,sys
 d=json.load(sys.stdin)
 emps=[e for e in d['employees'] if e['name'] in ('مروان','يوسف','مازن')]
@@ -9,7 +17,7 @@ print(emps[0]['id'] if emps else d['employees'][0]['id'])
 ")
 echo "منفذ المهمة: $EMP_ID"
 
-RUN=$(curl -s -m 30 -X POST "$BASE/api/agent" -H "Content-Type: application/json" -d "{\"employeeId\":\"$EMP_ID\",\"mission\":\"ابحث في الإنترنت عن آخر إصدار مستقر من Next.js وآخر إصدار مستقر من React، واكتب ملف report.md فيه: رقم الإصدارين، تاريخ الإصدار، واهم 3 مميزات لكل واحد. لازم بحث فعلي وتسليم ملف.\"}")
+RUN=$(curl -s -b "$JAR" -m 30 -X POST "$BASE/api/agent" -H "Content-Type: application/json" -d "{\"employeeId\":\"$EMP_ID\",\"mission\":\"ابحث في الإنترنت عن آخر إصدار مستقر من Next.js وآخر إصدار مستقر من React، واكتب ملف report.md فيه: رقم الإصدارين، تاريخ الإصدار، واهم 3 مميزات لكل واحد. لازم بحث فعلي وتسليم ملف.\"}")
 RUN_ID=$(echo "$RUN" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('runId',''))")
 echo "runId=$RUN_ID"
 if [ -z "$RUN_ID" ]; then echo "RAW: $RUN"; exit 1; fi
@@ -17,7 +25,7 @@ if [ -z "$RUN_ID" ]; then echo "RAW: $RUN"; exit 1; fi
 # Poll كل 6 ثواني لحد 5 دقايق
 for i in $(seq 1 50); do
   sleep 6
-  STATE=$(curl -s -m 20 "$BASE/api/agent/$RUN_ID")
+  STATE=$(curl -s -b "$JAR" -m 20 "$BASE/api/agent/$RUN_ID")
   STATUS=$(echo "$STATE" | python3 -c "import json,sys; print(json.load(sys.stdin).get('run',{}).get('status','?'))")
   echo "[t=$((i*6))s] status=$STATUS"
   if [ "$STATUS" = "done" ] || [ "$STATUS" = "failed" ]; then
