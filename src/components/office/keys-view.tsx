@@ -33,6 +33,8 @@ const PRESETS: Record<string, { label: string; baseUrl: string; model: string; k
   gemini: { label: "Google Gemini", baseUrl: "https://generativelanguage.googleapis.com", model: "gemini-3.8-flash", keyHint: "AIza... أو AQ.Ab...", docsUrl: "https://aistudio.google.com/apikey" },
   openrouter: { label: "OpenRouter (موديلات كتير + مجانية :free)", baseUrl: "https://openrouter.ai/api/v1", model: "openrouter/auto", keyHint: "sk-or-...", docsUrl: "https://openrouter.ai/keys" },
   openai: { label: "OpenAI", baseUrl: "https://api.openai.com/v1", model: "gpt-4o-mini", keyHint: "sk-...", docsUrl: "https://platform.openai.com/api-keys" },
+  metamuse: { label: "Meta Muse (Spark — مليار توكن بكود دعوة)", baseUrl: "https://api.meta.ai/v1", model: "muse-spark-1.3", keyHint: "مفتاحك من dev.meta.ai", docsUrl: "https://dev.meta.ai/docs/quickstart" },
+  ashna: { label: "AshnaAI (كتالوج كبير — gpt-6/claude/GLM/DeepSeek/Kimi)", baseUrl: "https://api.ashna.ai/v1/api", model: "glm-5.3-flash", keyHint: "مفتاحك من app.ashna.ai/account/api (مجاني)", docsUrl: "https://www.ashna.ai/api-docs" },
   groq: { label: "Groq (فيه طبقة مجانية)", baseUrl: "https://api.groq.com/openai/v1", model: "llama-3.3-70b-versatile", keyHint: "gsk_...", docsUrl: "https://console.groq.com/keys" },
   cerebras: { label: "Cerebras (أسرع استدلال مجاني)", baseUrl: "https://api.cerebras.ai/v1", model: "llama-3.3-70b", keyHint: "csk-...", docsUrl: "https://cloud.cerebras.ai" },
   sambanova: { label: "SambaNova (طبقة مجانية)", baseUrl: "https://api.sambanova.ai/v1", model: "Meta-Llama-3.3-70B-Instruct", keyHint: "...", docsUrl: "https://cloud.sambanova.ai" },
