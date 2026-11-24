@@ -24,7 +24,10 @@ dev.log
 *.log
 
 # مرفوعات المستخدم ومخلفات البيئة (مش جزء من مصدر التطبيق)
+# لكن route الرفع في التطبيق نفسه لازم يتتبع — استثناء صريح
 upload/
+!src/app/api/upload/
+!src/app/api/upload/**
 examples/
 output/
 
@@ -32,3 +35,4 @@ output/
 download/
 android/
 cap-www/.DS_Store
+tmp-fb/
