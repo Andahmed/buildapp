@@ -29,6 +29,8 @@ COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+# Prisma config imports this runtime dependency while running db push.
+COPY --from=builder /app/node_modules/effect ./node_modules/effect
 COPY --from=builder /app/node_modules/.bin ./node_modules/.bin
 EXPOSE 3000
 # عند كل إقلاع: نتأكد إن جداول القاعدة موجودة على الـ volume، ثم نشغّل السيرفر
