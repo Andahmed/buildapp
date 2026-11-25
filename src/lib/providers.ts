@@ -6,7 +6,7 @@ import { decryptSecret } from "@/lib/crypto";
 // تحسينات الإصدار ده (كلها مقاسة):
 // 1) تعدد المفاتيح: كل المفاتيح المفعلة بتتحاول بالدوران (round-robin) مع تبريد للمفاتيح الفاشلة
 // 2) إعادة محاولة ذكية مع backoff للأخطاء المؤقتة (429/402/شبكة/تايم أوت)
-// 3) Streaming حقيقي (SSE) للمحركات المتوافقة مع OpenAI — والمحركات بدون streaming بتتقسم تشunks
+// 3) Streaming حقيقي (SSE) للمحركات المتوافقة مع OpenAI — والمحركات بدون streaming بتتقسم إلى chunks
 // 4) مهلات أقصر (45 ثانية بدل 90) عشان الانتقال للمحرك اللي بعده يبقى أسرع
 // 5) مفيش ردود وهمية: الرد إما حقيقي أو خطأ واضح بالعربي
 
@@ -437,7 +437,7 @@ async function* openaiStream(
   if (!emitted) throw new Error("الرد الفوري كان فاضي");
 }
 
-/** تقسيم نص كامل لتشu نks متقاربة — للمحركات اللي مفيهاش streaming حقيقي */
+/** تقسيم نص كامل إلى chunks متقاربة — للمحركات اللي مفيهاش streaming حقيقي */
 async function* chunkText(text: string, size = 24, delayMs = 18): AsyncGenerator<string> {
   for (let i = 0; i < text.length; i += size) {
     yield text.slice(i, i + size);
