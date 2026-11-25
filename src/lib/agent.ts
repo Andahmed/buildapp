@@ -9,6 +9,7 @@ import { saveBufferToDisk, readSavedFile, guessMimeFromName } from "@/lib/files"
 import { runPythonSandboxed } from "@/lib/pysandbox";
 import { checkPublicUrl } from "@/lib/net-guard";
 import { searchChunks } from "@/lib/rag";
+import { buildEmployeeAgentContext } from "@/lib/agent-skills";
 
 // ============ محرك الوكيل المفتوح — بأسلوب OpenManus ============
 // دورة حقيقية: خطة (Plan) → تنفيذ خطوة بخطوة بأدوات فعلية (Act) → ملاحظة النتيجة (Observe) → التسليم النهائي (Deliver)
@@ -224,7 +225,7 @@ async function runTool(
   }
 }
 
-function buildActMessages(mission: string, employeeName: string, employeeRole: string, planSteps: { title: string; tool: string }[], stepIndex: number, observations: string[], fileNames: string[]) {
+function buildActMessages(mission: string, employeeName: string, employeeRole: string, agentContext: string, planSteps: { title: string; tool: string }[], stepIndex: number, observations: string[], fileNames: string[]) {
   const planText = planSteps.map((s, i) => `${i + 1}. ${s.title} [الأداة: ${s.tool}]`).join("\n");
   const obsText =
     observations.length > 0
@@ -342,6 +343,11 @@ async function executeRun(runId: string, tmpDir: string) {
     const run = await db.agentRun.findUnique({ where: { id: runId }, include: { employee: true } });
     if (!run) return;
 
+    // تحميل ملف مهارات الموظف وذاكرته قبل التخطيط والتنفيذ.
+    const employeeMemories = await db.employeeMemory.findMany({ where: { employeeId: run.employeeId }, orderBy: { createdAt: "desc" }, take: 6 }).catch(() => []);
+    const agentContext = buildEmployeeAgentContext(run.employee, employeeMemories);
+    await addLog(runId, "info", `تم تحميل تخصص ${run.employee.name} ومهاراته و${employeeMemories.length} ذكريات سابقة`);
+
     // ===== المرحلة 1: التخطيط =====
     await setRun(runId, { status: "planning" });
     await addLog(runId, "info", `بدأت المهمة — ${run.employee.name} بيحلل المطلوب ويبني الخطة...`);
@@ -368,7 +374,7 @@ async function executeRun(runId: string, tmpDir: string) {
     const planMessages = [
       {
         role: "system" as const,
-        content: `أنت مخطط مهام لوكيل تنفيذ بأسلوب OpenManus. حوّل المهمة لخطة عملية من 3 لـ 5 خطوات، كل خطوة فعلية قابلة للتنفيذ بأداة محددة.
+        content: `أنت مخطط مهام لوكيل تنفيذ متعدد المهارات. خصص الخطة حسب تخصص الموظف والمهارات والذاكرة التالية، واستعن بزميل عند الحاجة لتخصص مختلف.\n\n${agentContext}\n\nحوّل المهمة لخطة عملية من 3 لـ 5 خطوات، كل خطوة فعلية قابلة للتنفيذ بأداة محددة.
 حدد الأداة المناسبة لكل خطوة من دول بالظبط:
 - web_search: لو الخطوة محتاجة معلومات من الإنترنت
 - page_reader: لو محتاج قراءة صفحة محددة
@@ -386,7 +392,7 @@ async function executeRun(runId: string, tmpDir: string) {
       },
       {
         role: "user" as const,
-        content: `المهمة: ${run.mission}\nالموظف المنفذ: ${run.employee.name} — ${run.employee.role}${ragContext}\nزميلاك المتاحين للتفويض: ${teamRoster}`,
+        content: `المهمة: ${run.mission}\nالموظف المنفذ: ${run.employee.name} — ${run.employee.role}\nملف مهارات الوكيل:\n${agentContext}${ragContext}\nزميلاك المتاحين للتفويض: ${teamRoster}`,
       },
     ];
 
@@ -444,6 +450,7 @@ async function executeRun(runId: string, tmpDir: string) {
         run.mission,
         run.employee.name,
         run.employee.role,
+        agentContext,
         planSteps,
         i,
         observations,
@@ -604,7 +611,7 @@ async function executeRun(runId: string, tmpDir: string) {
       await addLog(runId, "info", "بتجهز الخلاصة النهائية...");
       // نفس ضمانة الملف: بنفحص نص المهمة نفسها مش الخطة بس
       if (missionNeedsFile(run.mission, planSteps)) {
-        const lastActMsgs = buildActMessages(run.mission, run.employee.name, run.employee.role, planSteps, Math.max(0, planSteps.length - 1), observations, []);
+        const lastActMsgs = buildActMessages(run.mission, run.employee.name, run.employee.role, agentContext, planSteps, Math.max(0, planSteps.length - 1), observations, []);
         await ensureDeliverableFile(runId, run.mission, lastActMsgs, observations, tmpDir);
       }
       const files = await db.workspaceFile.findMany({ where: { runId } });
@@ -617,7 +624,7 @@ async function executeRun(runId: string, tmpDir: string) {
           },
           {
             role: "user" as const,
-            content: `المهمة: ${run.mission}\nنتائج الخطوات:\n${observations.map((o) => `- ${o.slice(0, 800)}`).join("\n")}\nالملفات: ${files.map((f) => f.name).join("، ") || "مفيش"}`,
+            content: `ملف الوكيل:\n${agentContext}\n\nالمهمة: ${run.mission}\nنتائج الخطوات:\n${observations.map((o) => `- ${o.slice(0, 800)}`).join("\n")}\nالملفات: ${files.map((f) => f.name).join("، ") || "مفيش"}`,
           },
         ],
         { maxTokens: 2000, preferFree: true }
