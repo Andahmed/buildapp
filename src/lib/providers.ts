@@ -437,7 +437,7 @@ async function* openaiStream(
   if (!emitted) throw new Error("الرد الفوري كان فاضي");
 }
 
-/** تقسيم نص كامل لتشchunks متقاربة — للمحركات اللي مفيهاش streaming حقيقي */
+/** تقسيم نص كامل لتشu نks متقاربة — للمحركات اللي مفيهاش streaming حقيقي */
 async function* chunkText(text: string, size = 24, delayMs = 18): AsyncGenerator<string> {
   for (let i = 0; i < text.length; i += size) {
     yield text.slice(i, i + size);
