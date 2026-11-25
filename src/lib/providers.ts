@@ -6,7 +6,7 @@ import { decryptSecret } from "@/lib/crypto";
 // تحسينات الإصدار ده (كلها مقاسة):
 // 1) تعدد المفاتيح: كل المفاتيح المفعلة بتتحاول بالدوران (round-robin) مع تبريد للمفاتيح الفاشلة
 // 2) إعادة محاولة ذكية مع backoff للأخطاء المؤقتة (429/402/شبكة/تايم أوت)
-// 3) Streaming حقيقي (SSE) للمحركات المتوافقة مع OpenAI — والمحركات بدون streaming بتتقسم تشchunks
+// 3) Streaming حقيقي (SSE) للمحركات المتوافقة مع OpenAI — والمحركات بدون streaming بتتقسم تشنكس
 // 4) مهلات أقصر (45 ثانية بدل 90) عشان الانتقال للمحرك اللي بعده يبقى أسرع
 // 5) مفيش ردود وهمية: الرد إما حقيقي أو خطأ واضح بالعربي
 
@@ -41,7 +41,7 @@ export interface ProviderChoice {
 // وبعده أضف مفتاح بنوع custom و baseUrl=http://<host>:3001/v1
 export const PROVIDER_PRESETS: Record<string, { label: string; baseUrl: string; model: string; docs: string }> = {
   openai: { label: "OpenAI", baseUrl: "https://api.openai.com/v1", model: "gpt-4o-mini", docs: "platform.openai.com" },
-  openrouter: { label: "OpenRouter (بي وصل لموديلات كتير وفيه مجانية :free)", baseUrl: "https://openrouter.ai/api/v1", model: "openrouter/auto", docs: "openrouter.ai" },
+  openrouter: { label: "OpenRouter (بوابة وصل لموديلات كتير وفيه مجانية :free)", baseUrl: "https://openrouter.ai/api/v1", model: "openrouter/auto", docs: "openrouter.ai" },
   groq: { label: "Groq (سريع ومجاني)", baseUrl: "https://api.groq.com/openai/v1", model: "llama-3.3-70b-versatile", docs: "console.groq.com" },
   cerebras: { label: "Cerebras (أسرع استدلال مجاني)", baseUrl: "https://api.cerebras.ai/v1", model: "llama-3.3-70b", docs: "cloud.cerebras.ai" },
   sambanova: { label: "SambaNova (طبقة مجانية)", baseUrl: "https://api.sambanova.ai/v1", model: "Meta-Llama-3.3-70B-Instruct", docs: "cloud.sambanova.ai" },
@@ -437,7 +437,7 @@ async function* openaiStream(
   if (!emitted) throw new Error("الرد الفوري كان فاضي");
 }
 
-/** تقسيم نص كامل لتشunks متقاربة — للمحركات اللي مفيهاش streaming حقيقي */
+/** تقسيم نص كامل لتشنكس متقاربة — للمحركات اللي مفيهاش streaming حقيقي */
 async function* chunkText(text: string, size = 24, delayMs = 18): AsyncGenerator<string> {
   for (let i = 0; i < text.length; i += size) {
     yield text.slice(i, i + size);
