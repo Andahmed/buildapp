@@ -44,6 +44,7 @@ import {
   Building2,
   LayoutDashboard,
   LogOut,
+  Gamepad2,
 } from "lucide-react";
 
 const ACTIVITY_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
