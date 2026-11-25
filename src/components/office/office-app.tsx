@@ -68,7 +68,8 @@ const TABS: { id: Tab; label: string; icon: React.ComponentType<{ className?: st
   { id: "approvals", label: "بانتظارك", icon: ClipboardCheck },
   { id: "org", label: "الهيكل", icon: Network },
   { id: "tools", label: "الأدوات", icon: Wrench },
-  { id: "keys", label: "المفاتيح", icon: KeyRound },\n  { id: "games", label: "استوديو الألعاب", icon: Gamepad2 },
+  { id: "keys", label: "المفاتيح", icon: KeyRound },
+  { id: "games", label: "استوديو الألعاب", icon: Gamepad2 },
 ];
 
 export function OfficeApp() {
@@ -167,7 +168,8 @@ export function OfficeApp() {
         { tab: "office", label: "أرضية الشركة", icon: Code2, desc: "الخريطة والموظفين والنشاط" },
         { tab: "tasks", label: "مهام الوكيل", icon: Bot, desc: "تنفيذ حقيقي بأسلوب OpenManus" },
         { tab: "chat", label: "الشات", icon: MessageSquare, desc: "كلمنا أو ارفع ملفات وصور" },
-        { tab: "meetings", label: "الاجتماعات", icon: Presentation, desc: "اجتماع في القاعة الكبيرة" },\n        { tab: "games", label: "استوديو الألعاب", icon: Gamepad2, desc: "أنشئ ألعاباً وجربها من الموبايل" },
+        { tab: "meetings", label: "الاجتماعات", icon: Presentation, desc: "اجتماع في القاعة الكبيرة" },
+        { tab: "games", label: "استوديو الألعاب", icon: Gamepad2, desc: "أنشئ ألعاباً وجربها من الموبايل" },
       ],
     },
     {
