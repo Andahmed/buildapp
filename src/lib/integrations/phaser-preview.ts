@@ -60,7 +60,7 @@ export async function mountPhaserPreview(
   }
 
   const game = new Phaser.Game({
-    type: PhaserTypes.AUTO,
+    type: Phaser.AUTO,
     parent: container,
     width: config.width ?? 390,
     height: config.height ?? 700,
