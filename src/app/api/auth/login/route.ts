@@ -6,6 +6,7 @@ import {
   MIN_PASSWORD_LEN,
   authConfigured,
   createSessionToken,
+  sessionCookieFlags,
 } from "@/lib/auth";
 
 export const runtime = "nodejs";
@@ -112,17 +113,15 @@ export async function POST(req: NextRequest) {
   // نجاح — نمسح عداد الـ IP ونطلع جلسة موقعة
   failures.delete(ip);
   const token = await createSessionToken(process.env.AUTH_SECRET!.trim());
-  const isHttps =
-    req.headers.get("x-forwarded-proto") === "https" ||
-    new URL(req.url).protocol === "https:";
-
   const res = NextResponse.json({ ok: true });
+  const flags = sessionCookieFlags(req);
   res.cookies.set({
     name: SESSION_COOKIE,
     value: token,
     httpOnly: true,
-    sameSite: "lax",
-    secure: isHttps,
+    sameSite: flags.sameSite,
+    secure: flags.secure,
+    partitioned: flags.partitioned,
     path: "/",
     maxAge: Math.floor(SESSION_TTL_MS / 1000),
   });

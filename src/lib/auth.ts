@@ -9,6 +9,30 @@ export const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // أسبوع واحد
 export const MIN_PASSWORD_LEN = 8;
 export const MIN_SECRET_LEN = 16;
 
+/** هل الطلب جاي من جهاز محلي (وضع التطوير)؟ — الـ host لوحده كافي ومضمون */
+export function isLocalHost(host: string | null | undefined): boolean {
+  return /^(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)(:\d+)?$/i.test(host ?? "");
+}
+
+/**
+ * خصائص كوكي الجلسة حسب السياق:
+ * - المعاينة بتشتغل جوه iframe في منصة تواصل على HTTPS = سياق طرف ثالث،
+ *   والمتصفح (Chrome وFirefox) بيرفض كوكي Lax/Strict هناك — لازم SameSite=None مع Secure.
+ * - البروكسي ساعات مش بيبعت x-forwarded-proto، فبنعتمد على الـ host: أي نطاق عام = None+Secure.
+ * - المحلي بس (localhost/127.0.0.1) بيفضل Lax من غير Secure.
+ */
+export function sessionCookieFlags(req: {
+  headers: { get(k: string): string | null };
+  url: string;
+}): { sameSite: "none" | "lax"; secure: boolean; partitioned: boolean } {
+  const host =
+    req.headers.get("x-forwarded-host") ?? req.headers.get("host");
+  if (isLocalHost(host)) return { sameSite: "lax", secure: false, partitioned: false };
+  // None+Secure+Partitioned (CHIPS): بيخلي كوكي الجلسة يشتغل جوه الـ iframe
+  // حتى مع حظر الكوكي الطرف الثالث — والمتصفحات اللي ماتدعمش Partitioned بتتجاهل الخاصية
+  return { sameSite: "none", secure: true, partitioned: true };
+}
+
 /** هل إعدادات الدخول موجودة؟ — فشل مغلق: بدون إعداد مفيش أي محتوى غير صفحة الدخول */
 export function authConfigured(): boolean {
   const password = process.env.ADMIN_PASSWORD?.trim() ?? "";
