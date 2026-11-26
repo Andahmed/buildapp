@@ -81,3 +81,15 @@ BuildApp now has an opt-in server-side AshnaAI adapter in `src/lib/ai.ts`.
 5. Validate the endpoint with a low-token smoke test, then run lint and production build.
 
 No API key, Railway variable, billing setting, or production deployment was changed as part of this code commit.
+
+## AshnaAI multi-model catalogue integration
+
+The AshnaAI integration is a provider gateway, not a Claude-only integration.
+
+- `src/app/api/ai/models/route.ts` exposes a server-side proxy for AshnaAI's authenticated `GET /v1/api/models` catalogue. The browser never receives `ASHNA_API_KEY`.
+- `llm(messages, maxTokens, model)` accepts an optional per-request model ID, so callers can select any model ID available to the configured AshnaAI API key.
+- When no model is passed, the existing `ASHNA_MODEL_ID` setting is used; if unset, the current default remains `claude-sonnet-5`.
+- The model catalogue returns model IDs and provider names, not authoritative per-model free-tier or account-entitlement metadata. Do not label every listed model as free. AshnaAI plans, credits, model availability and prices may differ by account and can change.
+- A model appearing in the catalogue does not guarantee that the API key is entitled to use it; the completion endpoint can return a forbidden response.
+
+Next UI step: add a model picker backed by `GET /api/ai/models`, pass the selected model ID to `llm()`, and display free/paid status only when AshnaAI supplies verifiable pricing/entitlement metadata or the account owner confirms it. Add usage limits and cost controls before exposing paid models to all users.
