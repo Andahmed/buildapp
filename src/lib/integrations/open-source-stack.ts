@@ -14,6 +14,7 @@ export type OpenSourceIntegrationId =
 
 export type IntegrationState =
   | "planned"
+  | "in-progress"
   | "research-only"
   | "requires-separate-service";
 
@@ -29,7 +30,7 @@ export const OPEN_SOURCE_INTEGRATIONS: readonly OpenSourceIntegration[] = [
   {
     id: "phaser",
     name: "Phaser",
-    state: "planned",
+    state: "in-progress",
     enabled: false,
     boundary: "client-runtime",
   },
