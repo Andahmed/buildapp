@@ -1,19 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createHash, timingSafeEqual } from "crypto";
 import {
   SESSION_COOKIE,
   SESSION_TTL_MS,
-  MIN_PASSWORD_LEN,
-  authConfigured,
   createSessionToken,
+  matchesAdminPassword,
   sessionCookieFlags,
+  sessionSecret,
 } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
-// ============ دخول الأدمن — كلمة سر واحدة + حد معدل للمحاولات الفاشلة ============
+// ============ دخول الأدمن — كلمة سر + حد معدل للمحاولات الفاشلة ============
 // 8 محاولات فاشلة / 15 دقيقة لكل IP (بالذاكرة — إعادة تشغيل السيرفر بتصفّرها،
 // مقبول لسيرفر ذاتي الاستضافة واحد). النجاح بيمسح عداد الـ IP.
+// كلمة السر المقبولة: ADMIN_PASSWORD من بيئة التشغيل لو متظبطة، وإلا
+// الكلمات الافتراضية المدمجة في src/lib/auth.ts (بصمات sha-256 من غير نص صريح).
 
 const WINDOW_MS = 15 * 60 * 1000;
 const MAX_FAILURES = 8;
@@ -33,33 +34,7 @@ function clearExpired(): void {
   }
 }
 
-/** مقارنة ثابتة الزمن — هاش الأول عشان الأطوال تتساوى دايماً */
-function safeEqual(a: string, b: string): boolean {
-  const ha = createHash("sha256").update(a).digest();
-  const hb = createHash("sha256").update(b).digest();
-  return timingSafeEqual(ha, hb);
-}
-
 export async function POST(req: NextRequest) {
-  if (!authConfigured()) {
-    return NextResponse.json(
-      {
-        error:
-          "الخادم غير مهيأ — الأدمن لازم يحدد ADMIN_PASSWORD و AUTH_SECRET (16 حرف فأكثر) في بيئة التشغيل",
-      },
-      { status: 503 }
-    );
-  }
-
-  if (process.env.ADMIN_PASSWORD!.trim().length < MIN_PASSWORD_LEN) {
-    return NextResponse.json(
-      {
-        error: `ADMIN_PASSWORD على السيرفر أقصر من ${MIN_PASSWORD_LEN} حروف — الدخول مقفول لحد ما تتقوى`,
-      },
-      { status: 503 }
-    );
-  }
-
   clearExpired();
   const ip = clientIp(req);
   const entry = failures.get(ip);
@@ -88,8 +63,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "اكتب كلمة السر الأول" }, { status: 400 });
   }
 
-  const adminPassword = process.env.ADMIN_PASSWORD!.trim();
-  if (!safeEqual(password, adminPassword)) {
+  if (!(await matchesAdminPassword(password))) {
     const now = Date.now();
     const cur = failures.get(ip);
     if (!cur || cur.resetAt <= now) {
@@ -112,7 +86,7 @@ export async function POST(req: NextRequest) {
 
   // نجاح — نمسح عداد الـ IP ونطلع جلسة موقعة
   failures.delete(ip);
-  const token = await createSessionToken(process.env.AUTH_SECRET!.trim());
+  const token = await createSessionToken(sessionSecret());
   const res = NextResponse.json({ ok: true });
   const flags = sessionCookieFlags(req);
   res.cookies.set({

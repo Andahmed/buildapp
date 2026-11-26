@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   SESSION_COOKIE,
-  authConfigured,
+  sessionSecret,
   verifySessionToken,
 } from "@/lib/auth";
 
 // ============ بوابة الدخول (Next.js 16 proxy) ============
 // كل مسار — صفحة أو API — لازم عنده جلسة صالحة، عدا القائمة العامة تحت.
-// فشل مغلق: من غير ADMIN_PASSWORD و AUTH_SECRET كاملين مفيش أي محتوى،
-// والـ APIs بترجع 503 عشان أداة فحص الصحة في المنصة تعرف إن الإعداد ناقص.
+// التحقق بيستخدم نفس سر الجلسة (متغير البيئة AUTH_SECRET لو سليم، وإلا
+// الاحتياطي المدمج في src/lib/auth.ts) — فالكوكي الموقع من الدخول بيتبعت هنا.
 
 export const config = {
   // ملاحظة من بناء Next 16: الـ proxy بيشتغل Node.js runtime دايماً
@@ -39,26 +39,9 @@ export async function proxy(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // فشل مغلق — الإعداد ناقص
-  if (!authConfigured()) {
-    if (pathname.startsWith("/api/")) {
-      return NextResponse.json(
-        {
-          error:
-            "الخادم غير مهيأ: ADMIN_PASSWORD و AUTH_SECRET مطلوبان في بيئة التشغيل",
-        },
-        { status: 503 }
-      );
-    }
-    const url = req.nextUrl.clone();
-    url.pathname = "/login";
-    url.search = "?err=config";
-    return NextResponse.redirect(url);
-  }
-
   // الجلسة صالحة؟
   const token = req.cookies.get(SESSION_COOKIE)?.value;
-  const ok = await verifySessionToken(token, process.env.AUTH_SECRET!.trim());
+  const ok = await verifySessionToken(token, sessionSecret());
   if (ok) return NextResponse.next();
 
   // غير مصرح: JSON للـ API، وتحويل لصفحة الدخول للصفحات
