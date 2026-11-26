@@ -17,11 +17,11 @@ export async function getZAI() {
  * LLM requests through AshnaAI; without it, the existing ZAI provider remains
  * unchanged. Never expose this key to client bundles.
  */
-async function ashnaCompletion(messages: ChatMsg[], maxTokens?: number): Promise<string> {
+async function ashnaCompletion(messages: ChatMsg[], maxTokens?: number, selectedModel?: string): Promise<string> {
   const apiKey = process.env.ASHNA_API_KEY;
   if (!apiKey) throw new Error("ASHNA_API_KEY is not configured");
 
-  const model = process.env.ASHNA_MODEL_ID || "claude-sonnet-5";
+  const model = selectedModel || process.env.ASHNA_MODEL_ID || "claude-sonnet-5";
   const response = await fetch("https://api.ashna.ai/v1/api/chat/completions", {
     method: "POST",
     headers: {
@@ -52,11 +52,11 @@ async function ashnaCompletion(messages: ChatMsg[], maxTokens?: number): Promise
   return content;
 }
 
-export async function llm(messages: ChatMsg[], maxTokens?: number): Promise<string> {
+export async function llm(messages: ChatMsg[], maxTokens?: number, model?: string): Promise<string> {
   // Explicit opt-in: AshnaAI is used only when its server-side key is configured.
   // Provider failures are surfaced rather than silently sending prompts elsewhere.
   if (process.env.ASHNA_API_KEY) {
-    return ashnaCompletion(messages, maxTokens);
+    return ashnaCompletion(messages, maxTokens, model);
   }
 
   const zai = await getZAI();
