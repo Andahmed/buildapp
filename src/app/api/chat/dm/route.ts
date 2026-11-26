@@ -131,10 +131,10 @@ export async function POST(req: NextRequest) {
     })),
   ];
 
-  const saveReply = async (reply: string, provider: string): Promise<{ clean: string; task: string | null; result: string | null; taskCreated: { id: string; title: string } | null; provider: string }> => {
+  const saveReply = async (reply: string, provider: string, model = ""): Promise<{ clean: string; task: string | null; result: string | null; taskCreated: { id: string; title: string } | null; provider: string }> => {
     const { reply: clean, task, result } = parseTaskMarkers(reply);
     await db.message.create({
-      data: { channel: "dm", employeeId, role: "employee", senderName: employee.name, content: clean },
+      data: { channel: "dm", employeeId, role: "employee", senderName: employee.name, content: clean, provider, model },
     });
     let taskCreated: { id: string; title: string } | null = null;
     if (task && result) {
@@ -198,13 +198,17 @@ export async function POST(req: NextRequest) {
 
   // ===== الوضع العادي (JSON) — للتوافق =====
   let raw: string;
+  let resProvider = "unknown";
+  let resModel = "";
   try {
     const res = await callLLM(msgs, { temperature: 0.7, maxTokens: 2500 });
     raw = res.text;
+    resProvider = res.provider;
+    resModel = res.model;
   } catch {
     return NextResponse.json({ error: "فشل الاتصال بعقل الموظف، جرب تاني" }, { status: 502 });
   }
 
-  const saved = await saveReply(raw, "unknown");
+  const saved = await saveReply(raw, resProvider, resModel);
   return NextResponse.json({ reply: saved.clean, taskCreated: saved.taskCreated });
 }

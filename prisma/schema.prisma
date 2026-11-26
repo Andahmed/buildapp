@@ -40,6 +40,8 @@ model Message {
   role       String // ceo | employee
   senderName String?
   content    String
+  provider   String  @default("") // المحرك اللي رد بالرسالة (للعرض في الواجهة)
+  model      String  @default("") // الموديل اللي رد بالرسالة (للعرض في الواجهة)
   attachments String  @default("[]") // JSON array of attachment ids
   createdAt  DateTime  @default(now())
 }
@@ -180,29 +182,4 @@ model FileChunk {
 model AppMeta {
   key   String @id
   value String
-}
-
-
-// استوديو الألعاب داخل BuildApp — مشاريع HTML5 قابلة للمعاينة والتصدير
-model GameProject {
-  id        String        @id @default(cuid())
-  title     String
-  prompt    String
-  html      String
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
-  versions  GameVersion[]
-}
-
-model GameVersion {
-  id        String      @id @default(cuid())
-  projectId String
-  project   GameProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  version   Int
-  prompt    String
-  html      String
-  createdAt DateTime    @default(now())
-
-  @@unique([projectId, version])
-  @@index([projectId, createdAt])
 }
