@@ -59,3 +59,25 @@ Remaining gates before Phaser can be enabled:
 BuildApp is a Next.js 16 / React 19 application using Bun and Prisma 6. Its existing provider layer already handles BYOK keys and fallback routing. New agent orchestration must sit above that layer rather than replacing it. The current Games Studio stores standalone HTML projects in the existing `GameProject` / `GameVersion` models; Phaser support must preserve those records and the existing HTML export route.
 
 The PR currently targets `fix/railway-prisma-runtime`. Before merging, either confirm that this branch is the current deployment line, or retarget the PR to `main` after verifying that the Railway branch is fully merged into it.
+
+## Optional provider: AshnaAI (Claude Sonnet 5)
+
+BuildApp now has an opt-in server-side AshnaAI adapter in `src/lib/ai.ts`.
+
+- API base: `https://api.ashna.ai/v1/api`
+- Chat Completions endpoint: `POST /chat/completions`
+- Default model: `claude-sonnet-5` (override with `ASHNA_MODEL_ID`)
+- Secret: `ASHNA_API_KEY` (server-side only; never use a `NEXT_PUBLIC_` variable)
+- Behavior: when `ASHNA_API_KEY` is present, `llm()` uses AshnaAI; when absent, the existing ZAI path remains unchanged.
+- Failure behavior: AshnaAI errors are surfaced; prompts are not silently sent to a second provider.
+- This adapter is non-streaming and preserves the existing `ChatMsg` interface.
+
+### Enablement and cost controls
+
+1. Create an API key in AshnaAI Account → API and store it as the Railway service variable `ASHNA_API_KEY`; do not commit it.
+2. Optionally set `ASHNA_MODEL_ID=claude-sonnet-5`.
+3. Confirm account entitlement and billing before enabling. The published model page currently lists paid token pricing; do not describe Claude Sonnet 5 as free.
+4. Add provider-level quotas / spend limits before exposing this provider to all users.
+5. Validate the endpoint with a low-token smoke test, then run lint and production build.
+
+No API key, Railway variable, billing setting, or production deployment was changed as part of this code commit.
