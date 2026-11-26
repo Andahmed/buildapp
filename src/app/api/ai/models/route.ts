@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
+import { ashnaAllowedModels } from "@/lib/ashna-guard";
 
 /**
  * Server-side AshnaAI model catalogue proxy.
  * The API key is never returned to the browser. AshnaAI's model catalogue
  * lists model IDs, not reliable free/paid entitlement metadata; callers must
  * not infer that a model is free from its presence here.
+ *
+ * Cost guard: if ASHNA_ALLOWED_MODELS is set, only those IDs are returned.
+ * An empty/unset list means the owner explicitly allows the whole catalogue.
  */
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,8 +39,10 @@ export async function GET() {
       );
     }
 
+    const allowed = ashnaAllowedModels();
     const models = (payload?.data ?? [])
       .filter((item): item is { id: string; owned_by?: string } => typeof item.id === "string" && item.id.length > 0)
+      .filter((item) => allowed.size === 0 || allowed.has(item.id))
       .map((item) => ({ id: item.id, provider: item.owned_by ?? "unknown" }))
       .sort((a, b) => a.provider.localeCompare(b.provider) || a.id.localeCompare(b.id));
 
