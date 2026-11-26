@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { ensureSeeded } from "@/lib/seed";
-import { parseTaskMarkers, extractJSON, ChatMsg } from "@/lib/ai";
+import { parseTaskMarkers, extractJSON, ChatMsg, llm } from "@/lib/ai";
 import { callLLM, streamLLM } from "@/lib/providers";
+import { checkSelectedModel } from "@/lib/ashna-guard";
 import { COMPANY_NAME } from "@/lib/employees";
 import { sseResponse, SSEEvent } from "@/lib/sse";
 import { invalidate } from "@/lib/cache";
@@ -40,10 +41,17 @@ ${personas}
 
 export async function POST(req: NextRequest) {
   await ensureSeeded();
-  const { content, stream } = await req.json();
+  const { content, stream, model } = await req.json();
   if (!content?.trim()) {
     return NextResponse.json({ error: "content required" }, { status: 400 });
   }
+
+  // حرس الموديل: بلا مفتاح سيرفر يتجاهل الاختيار، وبرى قائمة السماح يرجّع 403 صريح.
+  const modelCheck = checkSelectedModel(model);
+  if (!modelCheck.ok) {
+    return NextResponse.json({ error: modelCheck.error }, { status: modelCheck.status });
+  }
+  const selectedModel = modelCheck.model;
 
   await db.message.create({
     data: { channel: "team", role: "ceo", senderName: "أنت (الرئيس التنفيذي)", content: content.trim() },
@@ -134,6 +142,19 @@ export async function POST(req: NextRequest) {
   }
 
   // ===== JSON للتوافق =====
+  // لو المستخدم اختار موديل AshnaAI مسموح: نستخدمه بالظبط كوسيطة تالتة لـ llm().
+  if (selectedModel) {
+    let raw: string;
+    try {
+      raw = await llm(msgs, 2200, selectedModel);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "فشل الاتصال بموديل AshnaAI";
+      return NextResponse.json({ error: message.slice(0, 300) }, { status: 502 });
+    }
+    const saved = await persistReplies(raw);
+    return NextResponse.json({ replies: saved, model: selectedModel });
+  }
+
   let raw: string;
   try {
     const res = await callLLM(msgs, { temperature: 0.8, maxTokens: 2200 });

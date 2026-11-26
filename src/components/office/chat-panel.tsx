@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Send, Volume2, Loader2, Users, MessagesSquare, Paperclip, X, Bot, FileText, Download } from "lucide-react";
+import { ModelPicker } from "./model-picker";
 
 export interface ChatTarget {
   type: "dm" | "team";
@@ -98,6 +99,8 @@ export function ChatPanel({ employees, target, onTargetChange, onTypingChange, r
   const [uploading, setUploading] = useState(false);
   const [streamingText, setStreamingText] = useState("");
   const [streamProvider, setStreamProvider] = useState("");
+  // موديل AshnaAI المختار — فاضي = «تلقائي» (المسار الحالي زي ما هو بالظبط)
+  const [modelId, setModelId] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -175,6 +178,11 @@ export function ChatPanel({ employees, target, onTargetChange, onTypingChange, r
     const typingKey = target.type === "dm" ? `emp-${target.id}` : "team";
     onTypingChange(typingKey, true);
 
+    // وضع الوكيل مش بياخد موديل مختار — بيكمل بمحركه المعتاد.
+    // لو فيه موديل AshnaAI مختار: نبعت JSON موحد (llm() مش بتسترّيم) والرد بييجي مرة واحدة.
+    const useAgent = opts?.runAsAgent ?? false;
+    const sendModel = !useAgent && modelId ? modelId : undefined;
+
     try {
       if (target.type === "dm") {
         const res = await fetch("/api/chat/dm", {
@@ -184,31 +192,51 @@ export function ChatPanel({ employees, target, onTargetChange, onTypingChange, r
             employeeId: target.id,
             content,
             attachmentIds: sentAttachments.map((a) => a.id),
-            runAsAgent: opts?.runAsAgent ?? false,
-            stream: !(opts?.runAsAgent ?? false),
+            runAsAgent: useAgent,
+            stream: !useAgent && !sendModel,
+            ...(sendModel ? { model: sendModel } : {}),
           }),
         });
 
-        // وضع الوكيل — JSON عادي
+        // وضع الوكيل أو موديل مختار — JSON عادي
         const contentType = res.headers.get("content-type") ?? "";
         if (contentType.includes("application/json")) {
           const json = await res.json();
           if (!res.ok) throw new Error(json.error || "error");
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: `r-${Date.now()}`,
-              channel: "dm",
-              role: "employee",
-              senderName: selected?.name ?? "",
-              content: `يا فندم، استلمت المهمة وبشتغل عليها دلوقتي بمحرك OpenManus (خطة → أدوات → تسليم). تابع التقدم لحظة بلحظة من تبويب «المهام» — والمخرجات والملفات هتوصلك هناك جاهزة للتحميل.`,
-              createdAt: new Date().toISOString(),
-            },
-          ]);
-          toast({ title: "الوكيل بدأ التنفيذ", description: "تابع التقدم في تبويب المهام" });
-          onAgentStarted?.(json.agentRunId);
-          scrollBottom();
-          return;
+          if (json.agentRunId) {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: `r-${Date.now()}`,
+                channel: "dm",
+                role: "employee",
+                senderName: selected?.name ?? "",
+                content: `يا فندم، استلمت المهمة وبشتغل عليها دلوقتي بمحرك OpenManus (خطة → أدوات → تسليم). تابع التقدم لحظة بلحظة من تبويب «المهام» — والمخرجات والملفات هتوصلك هناك جاهزة للتحميل.`,
+                createdAt: new Date().toISOString(),
+              },
+            ]);
+            toast({ title: "الوكيل بدأ التنفيذ", description: "تابع التقدم في تبويب المهام" });
+            onAgentStarted?.(json.agentRunId);
+            scrollBottom();
+            return;
+          }
+          if (typeof json.reply === "string" && json.reply.trim()) {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: `r-${Date.now()}`,
+                channel: "dm",
+                role: "employee",
+                senderName: selected?.name ?? "",
+                content: json.reply as string,
+                createdAt: new Date().toISOString(),
+              },
+            ]);
+            if (json.taskCreated) refreshOffice();
+            scrollBottom();
+            return;
+          }
+          throw new Error("الرد طلع فاضي — جرب تاني");
         }
 
         // ===== البث المباشر — الرد بيتكتب قدامك لحظة بلحظة =====
@@ -248,44 +276,67 @@ export function ChatPanel({ employees, target, onTargetChange, onTypingChange, r
         const res = await fetch("/api/chat/team", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content, stream: true }),
+          body: JSON.stringify({ content, stream: !sendModel, ...(sendModel ? { model: sendModel } : {}) }),
         });
-        if (!res.ok && !(res.headers.get("content-type") ?? "").includes("event-stream")) {
+        const teamResType = res.headers.get("content-type") ?? "";
+        if (teamResType.includes("application/json")) {
+          // موديل AshnaAI مختار — رد JSON موحد (أو خطأ صريح من حرس الموديل)
           const json = await res.json().catch(() => ({}));
-          throw new Error(json.error || "error");
-        }
-        let streamed = "";
-        for await (const ev of sseEvents(res)) {
-          if (ev.event === "meta") {
-            setStreamProvider(ev.data?.provider ?? "");
-          } else if (ev.event === "delta") {
-            streamed += ev.data?.text ?? "";
-            setStreamingText(streamed);
-            scrollBottom();
-          } else if (ev.event === "reply") {
+          if (!res.ok) throw new Error(json.error || "error");
+          const replies = Array.isArray(json.replies) ? json.replies : [];
+          for (const r of replies) {
             setMessages((prev) => [
               ...prev,
               {
-                id: `r-${Math.random()}`,
+                id: `r-${Date.now()}-${Math.random()}`,
                 channel: "team",
                 role: "employee",
-                senderName: ev.data?.senderName,
-                content: ev.data?.content,
+                senderName: r.senderName,
+                content: r.content,
                 createdAt: new Date().toISOString(),
               },
             ]);
-            setStreamingText("");
-            scrollBottom();
-            if (ev.data?.taskCreated) refreshOffice();
-          } else if (ev.event === "done") {
-            setStreamingText("");
-            setStreamProvider("");
-            if ((ev.data?.count ?? 0) > 0) refreshOffice();
-          } else if (ev.event === "error") {
-            throw new Error(ev.data?.error || "فشل البث");
+            if (r.taskCreated) refreshOffice();
           }
+          if (replies.length === 0) throw new Error("الفريق مش رد — جرب تاني");
+          scrollBottom();
+        } else if (!res.ok && !teamResType.includes("event-stream")) {
+          const json = await res.json().catch(() => ({}));
+          throw new Error(json.error || "error");
+        } else {
+          let streamed = "";
+          for await (const ev of sseEvents(res)) {
+            if (ev.event === "meta") {
+              setStreamProvider(ev.data?.provider ?? "");
+            } else if (ev.event === "delta") {
+              streamed += ev.data?.text ?? "";
+              setStreamingText(streamed);
+              scrollBottom();
+            } else if (ev.event === "reply") {
+              setMessages((prev) => [
+                ...prev,
+                {
+                  id: `r-${Math.random()}`,
+                  channel: "team",
+                  role: "employee",
+                  senderName: ev.data?.senderName,
+                  content: ev.data?.content,
+                  createdAt: new Date().toISOString(),
+                },
+              ]);
+              setStreamingText("");
+              scrollBottom();
+              if (ev.data?.taskCreated) refreshOffice();
+            } else if (ev.event === "done") {
+              setStreamingText("");
+              setStreamProvider("");
+              if ((ev.data?.count ?? 0) > 0) refreshOffice();
+            } else if (ev.event === "error") {
+              throw new Error(ev.data?.error || "فشل البث");
+            }
+          }
+          if (!streamed.trim()) throw new Error("الفريق مش رد — جرب تاني");
         }
-        if (!streamed.trim()) throw new Error("الفريق مش رد — جرب تاني");
       }
     } catch (err) {
       toast({
@@ -408,7 +459,7 @@ export function ChatPanel({ employees, target, onTargetChange, onTypingChange, r
         ) : (
           <>
             {/* هيدر المحادثة */}
-            <div className="flex items-center gap-3 border-b border-stone-100 p-3">
+            <div className="flex flex-wrap items-center gap-3 border-b border-stone-100 p-3">
               <button
                 className="rounded-lg p-1.5 text-stone-500 hover:bg-stone-100 md:hidden"
                 onClick={() => onTargetChange(null)}
@@ -431,6 +482,8 @@ export function ChatPanel({ employees, target, onTargetChange, onTypingChange, r
                 <div className="text-sm font-bold text-stone-800">{isTeam ? "شات الفريق" : `${selected?.name} — ${selected?.role}`}</div>
                 <div className="text-[11px] text-emerald-600">{sending ? "بيكتب..." : "متصل"}</div>
               </div>
+              {/* منتقي موديل AshnaAI — الافتراضي «تلقائي» = المسار الحالي بدون أي تغيير */}
+              <ModelPicker value={modelId} onChange={setModelId} disabled={sending} />
               {!isTeam && (
                 <Button
                   size="sm"
@@ -534,7 +587,6 @@ export function ChatPanel({ employees, target, onTargetChange, onTypingChange, r
                   {attachments.map((a) => (
                     <span key={a.id} className="flex items-center gap-1.5 rounded-full border border-stone-200 bg-stone-50 py-1 pl-1 pr-2.5 text-[11px] font-bold text-stone-700">
                       {a.mime.startsWith("image/") ? (
-                         
                         <img src={a.url ?? `/api/files/${a.id}`} alt={a.name} className="h-6 w-6 rounded-full object-cover" />
                       ) : (
                         <FileText className="h-3.5 w-3.5 text-stone-500" />
