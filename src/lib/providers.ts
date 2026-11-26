@@ -65,7 +65,8 @@ export const PROVIDER_PRESETS: Record<string, { label: string; baseUrl: string; 
 
 export const FALLBACK_CHAIN_LABELS = [
   "مفاتيحك المتصلة بالدوران (لو شغالة)",
-  "محرك مجاني مباشر بدون مفتاح (Pollinations — بطابور انتظار)",
+  "محرك مجاني مباشر بدون مفتاح (Pollinations)",
+  "المحرك المدمج GLM",
 ];
 
 function geminiErrorToArabic(status: number, body: string): string {
@@ -162,23 +163,22 @@ export async function pickProvider(preferred?: string): Promise<ProviderChoice |
 // ولو المحاولة الجاية جاية في نافذة الـ IP بنرفض محلياً في 0ms → السلسلة بتنتقل فوراً للمحرك اللي بعده.
 const POLLINATIONS_IP_WINDOW_MS = 46_000;
 let pollinationsLastUseMs = 0;
-// تسلسل طلبات Pollinations داخل نفس السيرفر: كل مهمة تستنى دورها بدل ما تفشل
-// فوراً أو تبعت طلبين متزامنين من نفس عنوان IP.
-let pollinationsQueue: Promise<void> = Promise.resolve();
 
-async function withPollinationsSlot<T>(operation: () => Promise<T>): Promise<T> {
-  const run = pollinationsQueue.then(async () => {
-    const waitMs = Math.max(0, POLLINATIONS_IP_WINDOW_MS - (Date.now() - pollinationsLastUseMs));
-    if (waitMs > 0) {
-      console.log(`[pollinations] الطلب في الطابور — انتظار ${Math.ceil(waitMs / 1000)} ثانية قبل دوره`);
-      await new Promise((resolve) => setTimeout(resolve, waitMs + 250));
-    }
-    // نحجز النافذة قبل إرسال الطلب لمنع التزامن حتى لو الطلب فشل.
-    pollinationsLastUseMs = Date.now();
-    return operation();
-  });
-  pollinationsQueue = run.then(() => undefined, () => undefined);
-  return run;
+function pollinationsGateEnter(): void {
+  if (pollinationsLastUseMs > 0 && Date.now() - pollinationsLastUseMs < POLLINATIONS_IP_WINDOW_MS) {
+    const waitSec = Math.max(1, Math.ceil((POLLINATIONS_IP_WINDOW_MS - (Date.now() - pollinationsLastUseMs)) / 1000));
+    const err = new Error(
+      `pollinations: حد المعدل المحلي للـ IP — فاضل ${waitSec}ث، بننتقل للمحرك اللي بعده فوراً بدون طلب حقيقي`
+    ) as Error & { status?: number; skipRetry?: boolean };
+    err.status = 429;
+    err.skipRetry = true; // مش هنعيد المحاولة على نفس المحرك — الطاقة للمحرك اللي بعده
+    throw err;
+  }
+}
+
+/** أي رد HTTP من Pollinations (ناجح أو 402) معناه إن نافذة الـ IP اتستهلكت */
+function pollinationsMarkConsumed(): void {
+  pollinationsLastUseMs = Date.now();
 }
 
 // ---- Preflight ميزانية التوكنات (فكرة من Habr — مقالة Bitrix24 عن فشل LLM في الإنتاج) ----
@@ -220,29 +220,29 @@ export function estimateTokensForTest(messages: LLMMessage[]): number {
 }
 
 async function callPollinationsText(messages: LLMMessage[], maxTokens?: number): Promise<string> {
-  return withPollinationsSlot(async () => {
-    const res = await fetch("https://text.pollinations.ai/openai", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "openai-fast",
-        messages: messages.map((m) => ({ role: m.role, content: m.content })),
-        max_tokens: maxTokens ?? 2048,
-      }),
-      signal: AbortSignal.timeout(45000),
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      const err = new Error(`pollinations error ${res.status}: ${body.slice(0, 200)}`) as Error & { status?: number; body?: string };
-      err.status = res.status;
-      err.body = body;
-      throw err;
-    }
-    const json = await res.json();
-    const text = json?.choices?.[0]?.message?.content ?? "";
-    if (!text.trim()) throw new Error("pollinations رد فاضي");
-    return text;
+  pollinationsGateEnter();
+  const res = await fetch("https://text.pollinations.ai/openai", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "openai-fast",
+      messages: messages.map((m) => ({ role: m.role, content: m.content })),
+      max_tokens: maxTokens ?? 2048,
+    }),
+    signal: AbortSignal.timeout(45000),
   });
+  pollinationsMarkConsumed(); // أي رد HTTP — النافذة اتحرقت
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    const err = new Error(`pollinations error ${res.status}: ${body.slice(0, 200)}`) as Error & { status?: number; body?: string };
+    err.status = res.status;
+    err.body = body;
+    throw err;
+  }
+  const json = await res.json();
+  const text = json?.choices?.[0]?.message?.content ?? "";
+  if (!text.trim()) throw new Error("pollinations رد فاضي");
+  return text;
 }
 
 let zaiInstance: Awaited<ReturnType<typeof ZAI.create>> | null = null;
@@ -521,22 +521,55 @@ function buildAttempts(
 function buildFreeAttempts(messages: LLMMessage[], opts?: { maxTokens?: number }): Attempt[] {
   const budget = opts?.maxTokens ?? 2048;
   const inputTokens = estimateMessagesTokens(messages);
-  if (inputTokens + budget > ENGINE_INPUT_WINDOWS.pollinations) {
-    console.log(
-      `[preflight] pollinations: المدخلات ~${Math.ceil(inputTokens / 1000)}k توكن + ${budget} رد أكبر من النافذة الآمنة ${ENGINE_INPUT_WINDOWS.pollinations} — تخطي محلي فوري`
-    );
-    return [];
+  const attempts: Attempt[] = [];
+  // Preflight لكل محرك مجاني — نفس فكرة بوابة حد المعدل: الرفض المحلي أرخص من الوقوف
+  for (const { engine, win } of [
+    { engine: "pollinations", win: ENGINE_INPUT_WINDOWS.pollinations },
+    { engine: "zai", win: ENGINE_INPUT_WINDOWS.zai },
+  ] as const) {
+    if (inputTokens + budget > win) {
+      console.log(
+        `[preflight] ${engine}: المدخلات ~${Math.ceil(inputTokens / 1000)}k توكن + ${budget} رد أكبر من النافذة الآمنة ${win} — تخطي محلي فوري`
+      );
+    }
   }
-  // لا نستدعي Z.ai SDK كـ fallback على Railway: هذا الـ SDK يعتمد على
-  // .z-ai-config الموجود في بيئة Z.ai IDE فقط، وليس في حاوية الإنتاج.
-  // Pollinations يُنفّذ الطلبات بالتتابع، ثم مفاتيح المستخدم المتصلة تُجرّب بعدها.
-  return [{
-    name: "pollinations",
-    model: "openai-fast",
-    keyId: null,
-    canStream: false,
-    run: () => callPollinationsText(messages, opts?.maxTokens),
-  }];
+  // الترتيب: المحرك المدمج GLM الأول (أقوى والتزاماً بالتعليمات وبدون حد معدل)،
+  // وPollinations احتياطي بعده — كان الأول وبيسبب اختراق وخلط لهجات في برومبتات الشركة
+  if (inputTokens + budget <= ENGINE_INPUT_WINDOWS.zai) {
+    attempts.push({
+      name: "zai",
+      model: "GLM مدمج",
+      keyId: null,
+      canStream: false,
+      run: () => callZAIText(messages, opts?.maxTokens),
+    });
+  }
+  if (inputTokens + budget <= ENGINE_INPUT_WINDOWS.pollinations) {
+    attempts.push({
+      name: "pollinations",
+      model: "openai-fast",
+      keyId: null,
+      canStream: true,
+      run: () => callPollinationsText(messages, opts?.maxTokens),
+      stream: async function* () {
+        pollinationsGateEnter(); // لو حد المعدل المحلي شغال — رفض فوري بدون فتح طلب
+        let marked = false;
+        for await (const d of openaiStream(
+          "https://text.pollinations.ai/openai",
+          { "Content-Type": "application/json" },
+          { model: "openai-fast", messages: messages.map((m) => ({ role: m.role, content: m.content })), max_tokens: opts?.maxTokens ?? 2048 },
+          45000
+        )) {
+          if (!marked) {
+            marked = true;
+            pollinationsMarkConsumed(); // أول chunk = الطلب اتقبل ووصل — النافذة اتحرقت
+          }
+          yield d;
+        }
+      },
+    });
+  }
+  return attempts;
 }
 
 function isRetryable(err: unknown): boolean {
