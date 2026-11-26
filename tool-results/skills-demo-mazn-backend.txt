@@ -83,7 +83,7 @@ describe('POST /api/files/upload', () => {
 ### 4. أمان سريع  
 - لا نضع اسم المستخدم مباشرة في مسار التخزين.  
 - نستخدم uuid لضمان فريد.  
-- نضيف فحص حجم الملف (max: 10MB) قبل `upload.single`.
+- نضيف فحص حجم الملف (max: 10MB) قبل `upload.single`.  
 
 ```js
 const upload = multer({
