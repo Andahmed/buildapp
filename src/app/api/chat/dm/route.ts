@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { ensureSeeded } from "@/lib/seed";
-import { parseTaskMarkers, ChatMsg } from "@/lib/ai";
+import { parseTaskMarkers, ChatMsg, llm } from "@/lib/ai";
 import { callLLM, callVision, streamLLM } from "@/lib/providers";
+import { checkSelectedModel } from "@/lib/ashna-guard";
 import { startAgentRun } from "@/lib/agent";
 import { readSavedFile } from "@/lib/files";
 import { sseResponse, SSEEvent, dmSSE } from "@/lib/sse";
@@ -26,12 +27,20 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   await ensureSeeded();
-  const { employeeId, content, attachmentIds, runAsAgent, stream } = await req.json();
+  const { employeeId, content, attachmentIds, runAsAgent, stream, model } = await req.json();
   if (!employeeId || (!content?.trim() && !(attachmentIds?.length > 0))) {
     return NextResponse.json({ error: "employeeId and content required" }, { status: 400 });
   }
   const employee = await db.employee.findUnique({ where: { id: employeeId } });
   if (!employee) return NextResponse.json({ error: "employee not found" }, { status: 404 });
+
+  // حرس الموديل المختار: بلا ASHNA_API_KEY يتجاهل الاختيار تمامًا (سلوك ZAI الحالي محفوظ)،
+  // وبلا قائمة سماح أو موديل خارجها يرجّع 403 صريح بدل تفعيل موديل مدفوع في صمت.
+  const modelCheck = checkSelectedModel(model);
+  if (!modelCheck.ok) {
+    return NextResponse.json({ error: modelCheck.error }, { status: modelCheck.status });
+  }
+  const selectedModel = modelCheck.model;
 
   // حفظ الرسالة مع المرفقات
   const attachmentIdsSafe: string[] = Array.isArray(attachmentIds) ? attachmentIds.slice(0, 4) : [];
@@ -196,7 +205,21 @@ export async function POST(req: NextRequest) {
     return sseResponse(events);
   }
 
-  // ===== الوضع العادي (JSON) — للتوافق =====
+  // ===== الوضع العادي (JSON) =====
+  // لو المستخدم اختار موديل AshnaAI مسموح: نستخدمه بالظبط كوسيطة تالتة لـ llm().
+  // مفيش اختيار أو مفتاح سيرفر: llm() بيكمل على مسار ZAI الحالي زي ما هو.
+  if (selectedModel) {
+    let raw: string;
+    try {
+      raw = await llm(msgs, 2500, selectedModel);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "فشل الاتصال بموديل AshnaAI";
+      return NextResponse.json({ error: message.slice(0, 300) }, { status: 502 });
+    }
+    const saved = await saveReply(raw, "ashna");
+    return NextResponse.json({ reply: saved.clean, taskCreated: saved.taskCreated, model: selectedModel });
+  }
+
   let raw: string;
   try {
     const res = await callLLM(msgs, { temperature: 0.7, maxTokens: 2500 });
