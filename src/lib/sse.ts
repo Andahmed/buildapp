@@ -49,17 +49,19 @@ export interface SSEEvent {
 /** حوّل streamLLM لمstream رسالة موظف واحدة مع حفظ الناتج في القاعدة */
 export interface DMStreamOptions {
   employeeName: string;
-  onSave: (reply: string, provider: string) => Promise<void>;
+  onSave: (reply: string, provider: string, model: string) => Promise<void>;
   onText?: (full: string) => Promise<void>;
 }
 
 export async function* dmSSE(gen: AsyncGenerator<StreamChunk>, opts: DMStreamOptions): AsyncGenerator<SSEEvent> {
   let full = "";
   let provider = "unknown";
+  let model = "";
   yield { event: "start", data: { employee: opts.employeeName } };
   for await (const chunk of gen) {
     if (chunk.meta) {
       provider = chunk.meta.provider;
+      model = chunk.meta.model ?? "";
       yield { event: "meta", data: { provider: chunk.meta.provider, model: chunk.meta.model } };
     }
     if (chunk.delta) {
@@ -71,6 +73,6 @@ export async function* dmSSE(gen: AsyncGenerator<StreamChunk>, opts: DMStreamOpt
     yield { event: "error", data: { error: "الرد الفوري طلع فاضي — جرب تاني" } };
     return;
   }
-  await opts.onSave(full, provider);
-  yield { event: "done", data: { reply: full, provider } };
+  await opts.onSave(full, provider, model);
+  yield { event: "done", data: { reply: full, provider, model } };
 }
