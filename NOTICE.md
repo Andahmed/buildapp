@@ -13,6 +13,7 @@
 | OpenManus (FoundationAgents/OpenManus) | MIT | دورة الوكيل: خطة → تنفيذ بأدوات → مراجعة ذاتية → تصحيح |
 | OpenAI Evals / Reflexion | MIT | سيناريوهات تقييم ثابتة + حكم LLM (scripts/evals.ts) |
 | CrewAI | MIT | بنية الأدوار: لكل موظف role/goal/personality في الـ system prompt |
+| addyosmani/agent-skills | MIT | مهارات هندسية ملخّصة في برومبتات المطورين (src/lib/employees.ts — ثوابت DEV_SKILLS وOWASP_SKILLS): التصحيح المنهجي (إعادة إنتاج ← عزل ← فرضية ← إصلاح ← اختبار مانع للتكرار) من skills/debugging-and-error-recovery، وTDD (اختبار فاشل ← أقل كود ناجح ← تنظيف) من skills/test-driven-development، وقائمة فحص الأمان (حقن/صلاحيات/أسرار/رفع ملفات) من skills/security-and-hardening — ملخّصة بأفكارنا بالعربي ومفيش سطر منسوخ حرفياً |
 
 ## ممنوع النسخ منه (رخص مقيدة)
 

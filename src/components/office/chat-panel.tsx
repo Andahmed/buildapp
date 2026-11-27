@@ -232,6 +232,8 @@ export function ChatPanel({ employees, target, onTargetChange, onTypingChange, r
                 senderName: selected?.name ?? "",
                 content: reply,
                 createdAt: new Date().toISOString(),
+                provider: ev.data?.provider ?? "",
+                model: ev.data?.model ?? "",
               },
             ]);
             setStreamingText("");
@@ -272,6 +274,8 @@ export function ChatPanel({ employees, target, onTargetChange, onTypingChange, r
                 senderName: ev.data?.senderName,
                 content: ev.data?.content,
                 createdAt: new Date().toISOString(),
+                provider: ev.data?.provider ?? "",
+                model: ev.data?.model ?? "",
               },
             ]);
             setStreamingText("");
@@ -484,6 +488,11 @@ export function ChatPanel({ employees, target, onTargetChange, onTypingChange, r
                           </button>
                         )}
                       </div>
+                      {!mine && m.provider && m.provider !== "unknown" && (
+                        <span className="px-1 text-[9px] text-stone-400" dir="ltr">
+                          عبر {m.provider}{m.model ? ` • ${m.model}` : ""}
+                        </span>
+                      )}
                     </div>
                   </div>
                 );

@@ -37,7 +37,7 @@ export default function RootLayout({
         <Toaster />
         <script
           dangerouslySetInnerHTML={{
-            __html: `if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('/sw.js').catch(function () {}); }); }`,
+            __html: `if ('serviceWorker' in navigator) { window.addEventListener('load', function () { var inFrame = false; try { inFrame = window.self !== window.top; } catch (e) { inFrame = true; } if (inFrame || location.hostname === 'localhost') return; navigator.serviceWorker.register('/sw.js').catch(function () {}); }); }`,
           }}
         />
       </body>

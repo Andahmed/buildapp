@@ -41,6 +41,8 @@ export interface Msg {
   senderName?: string | null;
   content: string;
   createdAt: string;
+  provider?: string | null; // المحرك اللي رد (للعرض)
+  model?: string | null; // الموديل اللي رد (للعرض)
   attachments?: unknown; // JSON string أو مصفوفة مرفقات
 }
 

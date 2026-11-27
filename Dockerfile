@@ -5,10 +5,14 @@
 FROM oven/bun:1 AS base
 WORKDIR /app
 
-# ---- طبقة الاعتماديات (بتيتبنى مرة واحدة ما دام bun.lock مغيرش) ----
+# ---- طبقة الاعتماديات ----
+# بدون --frozen-lockfile عمداً: package.json اتحدّث (ترقية Next 16.4.6 + إزالة
+# next-auth غير المستخدمة — خطوة 21/22 من فحص الأمان) و bun.lock في المستودع
+# لسه على النسخة القديمة. bun install هنا بيمزج الاثنين ويحدّث الـ lock داخل
+# الصورة. النسخ ثابتة بالـ exact pin في package.json للإطار الأساسي (next).
 FROM base AS deps
 COPY package.json bun.lock ./
-RUN bun install --frozen-lockfile
+RUN bun install
 
 # ---- طبقة البناء ----
 FROM base AS builder

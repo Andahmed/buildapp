@@ -40,6 +40,8 @@ model Message {
   role       String // ceo | employee
   senderName String?
   content    String
+  provider   String  @default("") // المحرك اللي رد بالرسالة (للعرض في الواجهة)
+  model      String  @default("") // الموديل اللي رد بالرسالة (للعرض في الواجهة)
   attachments String  @default("[]") // JSON array of attachment ids
   createdAt  DateTime  @default(now())
 }

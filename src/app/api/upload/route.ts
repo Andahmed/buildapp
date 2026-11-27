@@ -7,6 +7,11 @@ export const runtime = "nodejs";
 // أقصى حجم رفع — 10MB لكل ملف (مرفوعات مساحة العمل)
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
+// حظر الملفات التنفيذية والسكريبتات (خطوة 18 من فحص الأمان — فيديو الـ27 خطوة):
+// مفيش exe/bat/sh/dll... على السيرفر — أنواع تنفيذية خبيثة محظورة مهما كان المحتوى.
+const BLOCKED_EXT =
+  /\.(exe|msi|bat|cmd|com|pif|scr|vbs|vbe|ps1|psm1|sh|bash|dll|jar|appimage|deb|rpm|dmg|pkg|msix|hta|cpl|inf|reg|lnk|iso|bin)$/i;
+
 // رفع ملف لمساحة عمل الشركة — الملف على القرص في db/uploads وبياناته في WorkspaceFile (kind: upload)
 // الواجهة (chat-panel.tsx) بتستدعي POST /api/upload وبتتوقع { file: { id, name, mime, size } }
 export async function POST(req: NextRequest) {
@@ -23,6 +28,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: "الملف أكبر من الحد المسموح (10MB)" },
         { status: 413 }
+      );
+    }
+    const safeName = (f.name || "file").slice(0, 120);
+    if (BLOCKED_EXT.test(safeName)) {
+      return NextResponse.json(
+        { error: "نوع الملف مرفوض — الملفات التنفيذية والسكريبتات غير مسموحة" },
+        { status: 415 }
       );
     }
     const mime = f.type || guessMimeFromName(f.name);

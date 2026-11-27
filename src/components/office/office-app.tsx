@@ -9,6 +9,7 @@ import { OrgChart } from "./org-chart";
 import { ToolsView } from "./tools-view";
 import { TasksView } from "./tasks-view";
 import { KeysView } from "./keys-view";
+import { GamesStudio } from "./games-studio";
 import { HireDialog } from "./hire-dialog";
 import { OfficeData, ActivityItem, timeAgo } from "./types";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,7 @@ import {
   Building2,
   LayoutDashboard,
   LogOut,
+  Gamepad2,
 } from "lucide-react";
 
 const ACTIVITY_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -57,7 +59,7 @@ const ACTIVITY_ICONS: Record<string, React.ComponentType<{ className?: string }>
   sparkles: Rocket,
 };
 
-type Tab = "office" | "tasks" | "chat" | "meetings" | "approvals" | "org" | "tools" | "keys";
+type Tab = "office" | "tasks" | "chat" | "meetings" | "approvals" | "org" | "tools" | "keys" | "games";
 
 const TABS: { id: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: "office", label: "الشركة", icon: Code2 },
@@ -68,6 +70,7 @@ const TABS: { id: Tab; label: string; icon: React.ComponentType<{ className?: st
   { id: "org", label: "الهيكل", icon: Network },
   { id: "tools", label: "الأدوات", icon: Wrench },
   { id: "keys", label: "المفاتيح", icon: KeyRound },
+  { id: "games", label: "استوديو الألعاب", icon: Gamepad2 },
 ];
 
 export function OfficeApp() {
@@ -167,6 +170,7 @@ export function OfficeApp() {
         { tab: "tasks", label: "مهام الوكيل", icon: Bot, desc: "تنفيذ حقيقي بأسلوب OpenManus" },
         { tab: "chat", label: "الشات", icon: MessageSquare, desc: "كلمنا أو ارفع ملفات وصور" },
         { tab: "meetings", label: "الاجتماعات", icon: Presentation, desc: "اجتماع في القاعة الكبيرة" },
+        { tab: "games", label: "استوديو الألعاب", icon: Gamepad2, desc: "أنشئ ألعاباً وجربها من الموبايل" },
       ],
     },
     {
@@ -425,7 +429,7 @@ export function OfficeApp() {
           />
         )}
 
-        {tab === "keys" && <KeysView />}
+        {tab === "keys" && <KeysView />}\n\n        {tab === "games" && <GamesStudio />}
       </main>
 
       <HireDialog

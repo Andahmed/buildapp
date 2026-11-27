@@ -533,6 +533,17 @@ function buildFreeAttempts(messages: LLMMessage[], opts?: { maxTokens?: number }
       );
     }
   }
+  // الترتيب: المحرك المدمج GLM الأول (أقوى والتزاماً بالتعليمات وبدون حد معدل)،
+  // وPollinations احتياطي بعده — كان الأول وبيسبب اختراق وخلط لهجات في برومبتات الشركة
+  if (inputTokens + budget <= ENGINE_INPUT_WINDOWS.zai) {
+    attempts.push({
+      name: "zai",
+      model: "GLM مدمج",
+      keyId: null,
+      canStream: false,
+      run: () => callZAIText(messages, opts?.maxTokens),
+    });
+  }
   if (inputTokens + budget <= ENGINE_INPUT_WINDOWS.pollinations) {
     attempts.push({
       name: "pollinations",
@@ -556,15 +567,6 @@ function buildFreeAttempts(messages: LLMMessage[], opts?: { maxTokens?: number }
           yield d;
         }
       },
-    });
-  }
-  if (inputTokens + budget <= ENGINE_INPUT_WINDOWS.zai) {
-    attempts.push({
-      name: "zai",
-      model: "GLM مدمج",
-      keyId: null,
-      canStream: false,
-      run: () => callZAIText(messages, opts?.maxTokens),
     });
   }
   return attempts;

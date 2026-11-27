@@ -1,0 +1,105 @@
+===== مازن (tool-results/skills-demo-mazn-backend.txt) =====
+السؤال: باج حقيقي عندنا: endpoint /api/files/upload بيقع 500 أحياناً لما المستخدم يرفع ملف اسمه فيه مسافات، وأحياناً بيرفع عادي. اتصرف كأن الملف قدامك واكتبلي إزاي تحلها خطوة خطوة.
+
+الرد:
+يا فندم، إحنا هنتعامل مع الباج في `/api/files/upload` خطوة بخطوة.  
+الخطوات الجوهرية هتكون:  
+1. رفع طبقة معالجة الاسم قبل اللي يروح للـ S3/FS.  
+2. تطهير الاسم (trim + replace spaces بـ “_” أو “-”).  
+3. التعامل مع ملفات متعددة (multipart).  
+4. اختبار قبل التشغيل (TDD).  
+
+### 1. تحليل السبب
+- الدالة بتستخدم `file.originalname` مباشرة للحفظ.  
+- لو الاسم فيه مسافات أثناء `form-data` أو عند بعض المتصفحات، البنية بتخرب في URL أو مسار التخزين.  
+- ده بيولد خطأ 500 في بعض الأحيان بسبب غير الاعتناء بـ `Path.join()` أو `encodeURI`.
+
+### 2. الحل المقترح  
+```js
+// src/routes/files.js
+const express = require('express');
+const router = express.Router();
+const { createWriteStream } = require('fs');
+const path = require('path');
+const multer = require('multer');
+const { v4: uuidv4 } = require('uuid');
+
+// 1. Multer config (memory storage to process name first)
+const storage = multer.memoryStorage();
+const upload = multer({ storage });
+
+router.post('/upload', upload.single('file'), async (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file' });
+
+    // 2. Sanitize filename
+    const originalName = req.file.originalname.trim();
+    const sanitized = originalName
+      .replace(/[\s]+/g, '_')            // replace spaces
+      .replace(/[^\w.-]/g, '');         // keep only word, dot, hyphen
+
+    const fileName = `${uuidv4()}-${sanitized}`;
+    const destPath = path.join(process.env.UPLOAD_DIR, fileName);
+
+    // 3. Save to disk/FS (or S3 if needed)
+    const stream = createWriteStream(destPath);
+    stream.write(req.file.buffer);
+    stream.end();
+
+    stream.on('finish', () => {
+      res.json({ file: fileName, url: `/uploads/${fileName}` });
+    });
+
+    stream.on('error', err => {
+      next(err);
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+module.exports = router;
+```
+
+### 3. TDD – اختبار سريع
+```js
+// tests/files.test.js
+const request = require('supertest');
+const app = require('../app');
+const path = require('path');
+
+describe('POST /api/files/upload', () => {
+  it('should upload file with spaces in name and return sanitized name', async () => {
+    const res = await request(app)
+      .post('/api/files/upload')
+      .attach('file', path.join(__dirname, 'fixtures', 'file with spaces.txt'));
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.file).toMatch(/^[\da-f-]+-file_with_spaces\.txt$/);
+  });
+});
+```
+
+### 4. أمان سريع  
+- لا نضع اسم المستخدم مباشرة في مسار التخزين.  
+- نستخدم uuid لضمان فريد.  
+- نضيف فحص حجم الملف (max: 10MB) قبل `upload.single`.  
+
+```js
+const upload = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 }
+});
+```
+
+### 5. نشر  
+- اعمل `npm run test` علشان يشيل للfail فحص.  
+- بعد تأكد، دمج السورس في `main` وخلي CI يعمّ البرامج.
+
+**الملف المتأثر:** `src/routes/files.js` و `tests/files.test.js`.  
+
+ملف S3/FS config يبقى من `process.env.UPLOAD_DIR` أو `SUPABASE_BUCKET`.
+
+الخطوات دي هتوقف الـ 500 لما يكون الاسم فيه مسافات وتخلي الخدمة مستقرة.
+
+فحوص: {"خطوات إعادة إنتاج/عزل":false,"فرضية واضحة":true,"اختبار يمنع التكرار":false}
