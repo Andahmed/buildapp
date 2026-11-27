@@ -37,9 +37,14 @@ function clearExpired(): void {
 export async function POST(req: NextRequest) {
   clearExpired();
   const ip = clientIp(req);
+  // سجل نشاط الدخول (خطوة 8 من فحص الأمان): كل نجاح أو فشل بيتكتب في سجلات
+  // المنصة (Railway Logs) بالوقت + الـ IP — عشان يبان أي محاولة مشبوهة فوراً.
+  const audit = (event: string) =>
+    console.log(`[auth] ${new Date().toISOString()} ${event} ip=${ip}`);
   const entry = failures.get(ip);
   if (entry && entry.count >= MAX_FAILURES) {
     const retryAfter = Math.ceil((entry.resetAt - Date.now()) / 1000);
+    audit("rate-limited");
     return NextResponse.json(
       {
         error: `محاولات غلط كتير — حاول تاني بعد ${Math.max(
@@ -73,6 +78,7 @@ export async function POST(req: NextRequest) {
     }
     const used = failures.get(ip)!.count;
     const left = Math.max(0, MAX_FAILURES - used);
+    audit("login-failed");
     return NextResponse.json(
       {
         error:
@@ -86,6 +92,7 @@ export async function POST(req: NextRequest) {
 
   // نجاح — نمسح عداد الـ IP ونطلع جلسة موقعة
   failures.delete(ip);
+  audit("login-ok");
   const token = await createSessionToken(sessionSecret());
   const res = NextResponse.json({ ok: true });
   const flags = sessionCookieFlags(req);
